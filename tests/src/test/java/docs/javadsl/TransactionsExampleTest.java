@@ -154,7 +154,7 @@ public class TransactionsExampleTest extends EmbeddedKafkaJunit4Test {
                     .map(msg -> ProducerMessage.single(
                                             new ProducerRecord<>(targetTopic, msg.record().key(), msg.record().value()),
                                             msg.partitionOffset()))
-                    .runWith(Transactional.sink(producerSettings, transactionalId + pair.first()), materializer);
+                    .runWith(Transactional.sink(producerSettings, transactionalId + "-" + pair.first()), materializer);
             })
             .toMat(Sink.ignore(), Keep.both())
             .mapMaterializedValue(Consumer::createDrainingControl)

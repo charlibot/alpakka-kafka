@@ -117,7 +117,7 @@ class TransactionsExample extends DocsSpecBase(KafkaPorts.ScalaTransactionsExamp
             .map { msg =>
               ProducerMessage.single(new ProducerRecord(sinkTopic, msg.record.key, msg.record.value), msg.partitionOffset)
             }
-            .runWith(Transactional.sink(producerSettings, transactionalId + tp))
+            .runWith(Transactional.sink(producerSettings, transactionalId + "-" + tp))
         }
         .toMat(Sink.ignore)(Keep.both)
         .mapMaterializedValue(DrainingControl.apply)

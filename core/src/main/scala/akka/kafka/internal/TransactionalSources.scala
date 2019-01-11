@@ -14,7 +14,7 @@ import akka.kafka.{AutoSubscription, ConsumerSettings, Subscription}
 import akka.stream.SourceShape
 import akka.stream.scaladsl.Source
 import akka.stream.stage.GraphStageLogic
-import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
+import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.requests.IsolationLevel
 

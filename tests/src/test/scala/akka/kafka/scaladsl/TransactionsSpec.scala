@@ -96,7 +96,7 @@ class TransactionsSpec extends SpecBase(kafkaPort = KafkaPorts.TransactionsSpec)
                   ProducerMessage.single(new ProducerRecord[String, String](sinkTopic, msg.record.value),
                                          msg.partitionOffset)
                 }
-                .runWith(Transactional.sink(producerDefaults, group + tp))
+                .runWith(Transactional.sink(producerDefaults, group + "-" + tp))
           }
           .toMat(Sink.ignore)(Keep.left)
           .run()
