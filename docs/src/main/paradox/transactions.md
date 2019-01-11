@@ -52,13 +52,27 @@ Scala
 Java
 : @@ snip [snip](/tests/src/test/java/docs/javadsl/TransactionsExampleTest.java) { #transactionalFailureRetry }
 
+### Partitioned Example
+
+`Transactional.partitionedSource` 
+(@scala[@scaladoc[Transactional API](akka.kafka.scaladsl.Transactional$)]@java[@scaladoc[Transactional API](akka.kafka.javadsl.Transactional$)])
+ support tracking the automatic partition assignment from Kafka. When a topic-partition is assigned to a consumer, this source will emit a tuple with the assigned topic-partition and a corresponding source. When a topic-partition is revoked, the corresponding source completes.
+ 
+By generating the `transactional.id` from the [[TopicPartition]], multiple instances of your application can run without having to manually assign partitions to each instance.
+
+Scala
+: @@ snip [snip](/tests/src/test/scala/docs/scaladsl/TransactionsExample.scala) { #partitionedTransactionalSink }
+
+Java
+: @@ snip [snip](/tests/src/test/java/docs/javadsl/TransactionsExampleTest.java) { #partitionedTransactionalSink }
+
 ## Caveats
 
 There are several scenarios that this library's implementation of Kafka transactions does not automatically account for.
 
 All of the scenarios covered in the @ref[At-Least-Once Delivery documentation](atleastonce.md) (Multiple Effects per Commit, Non-Sequential Processing, and Conditional Message Processing) are applicable to transactional scenarios as well.
 
-Only one application instance per `transactional.id` is allowed.  If two application instances with the same `transactional.id` are run at the same time then the instance that registers with Kafka's transaction coordinator second will throw a `ProducerFencedException` so it doesn't interfere with transactions in process by the first instance.  To distribute multiple transactional workflows for the same subscription the user must manually subdivide the subscription across multiple instances of the application.  This may be handled internally in future versions.
+Only one application instance per `transactional.id` is allowed.  If two application instances with the same `transactional.id` are run at the same time then the instance that registers with Kafka's transaction coordinator second will throw a `ProducerFencedException` so it doesn't interfere with transactions in process by the first instance.  To distribute multiple transactional workflows for the same subscription the user must manually subdivide the subscription across multiple instances of the application or use the partitioned source with the `transactional.id` generated from the topic partition.  This may be handled internally in future versions.
 
 Any state in the transformation logic is not part of a transaction.  It's left to the user to rebuild state when applying stateful operations with transaction.  It's possible to encode state into messages produced to topics during a transaction.  For example you could produce messages to a topic that represents an event log as part of a transaction.  This event log can be replayed to reconsititue the correct state before the stateful stream resumes consuming again at startup.
 

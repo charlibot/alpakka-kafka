@@ -73,6 +73,54 @@ class TransactionsSpec extends SpecBase(kafkaPort = KafkaPorts.TransactionsSpec)
       }
     }
 
+    "complete with partitioned source" in {
+      assertAllStagesStopped {
+        val sourceTopic = createTopicName(1)
+        val sinkTopic = createTopicName(2)
+        val group = createGroupId(1)
+
+        givenInitializedTopic(sourceTopic)
+        givenInitializedTopic(sinkTopic)
+
+        Await.result(produce(sourceTopic, 1 to 100), remainingOrDefault)
+
+        val consumerSettings = consumerDefaults.withGroupId(group)
+
+        val control = Transactional
+          .partitionedSource(consumerSettings, TopicSubscription(Set(sourceTopic), None))
+          .mapAsyncUnordered(8) {
+            case (tp, source) =>
+              source
+                .filterNot(_.record.value() == InitialMsg)
+                .map { msg =>
+                  ProducerMessage.single(new ProducerRecord[String, String](sinkTopic, msg.record.value),
+                                         msg.partitionOffset)
+                }
+                .runWith(Transactional.sink(producerDefaults, group + tp))
+          }
+          .toMat(Sink.ignore)(Keep.left)
+          .run()
+
+        val probeConsumerGroup = createGroupId(2)
+        val probeConsumerSettings = consumerDefaults
+          .withGroupId(probeConsumerGroup)
+          .withProperties(ConsumerConfig.ISOLATION_LEVEL_CONFIG -> "read_committed")
+
+        val probeConsumer = Consumer
+          .plainSource(probeConsumerSettings, TopicSubscription(Set(sinkTopic), None))
+          .filterNot(_.value == InitialMsg)
+          .map(_.value())
+          .runWith(TestSink.probe)
+
+        probeConsumer
+          .request(100)
+          .expectNextN((1 to 100).map(_.toString))
+
+        probeConsumer.cancel()
+        Await.result(control.shutdown(), remainingOrDefault)
+      }
+    }
+
     "complete when messages are filtered out" in assertAllStagesStopped {
       val sourceTopic = createTopicName(1)
       val sinkTopic = createTopicName(2)

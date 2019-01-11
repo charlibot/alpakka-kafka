@@ -7,13 +7,15 @@ package akka.kafka.javadsl
 
 import java.util.concurrent.CompletionStage
 
+import akka.japi.Pair
 import akka.kafka.ConsumerMessage.TransactionalMessage
 import akka.kafka.ProducerMessage._
 import akka.kafka._
-import akka.kafka.internal.ConsumerControlAsJava
+import akka.kafka.internal.{ConsumerControlAsJava, TransactionalSubSource}
 import akka.kafka.javadsl.Consumer.Control
 import akka.stream.javadsl.{Flow, Sink, Source}
 import akka.{Done, NotUsed}
+import org.apache.kafka.common.TopicPartition
 
 import scala.compat.java8.FutureConverters.FutureOps
 
@@ -30,6 +32,28 @@ object Transactional {
                    subscription: Subscription): Source[TransactionalMessage[K, V], Control] =
     scaladsl.Transactional
       .source(consumerSettings, subscription)
+      .mapMaterializedValue(new ConsumerControlAsJava(_))
+      .asJava
+
+  /**
+   * The `partitionedSource` is a way to track automatic partition assignment from kafka.
+   * When a topic-partition is assigned to a consumer, this source will emit tuples with the assigned topic-partition and a corresponding
+   * source of `TransactionalMessage`s. Each source is setup for for Exactly Only Once (EoS) kafka message semantics.
+   * To enable EoS it's necessary to use the [[Transactional.sink]] or [[Transactional.flow]] (for passthrough).
+   * When a topic-partition is revoked, the corresponding source completes.
+   *
+   * By generating the `transactionalId` from the [[TopicPartition]], multiple instances of your application can run
+   * without having to manually assign partitions to each instance.
+   */
+  def partitionedSource[K, V](
+      consumerSettings: ConsumerSettings[K, V],
+      subscription: AutoSubscription
+  ): Source[Pair[TopicPartition, Source[TransactionalMessage[K, V], NotUsed]], Control] =
+    scaladsl.Transactional
+      .partitionedSource(consumerSettings, subscription)
+      .map {
+        case (tp, source) => Pair(tp, source.asJava)
+      }
       .mapMaterializedValue(new ConsumerControlAsJava(_))
       .asJava
 
