@@ -104,7 +104,7 @@ class ProducerSpec(_system: ActorSystem)
                                                 closeOnStop,
                                                 () => mock.mock,
                                                 settings.eosCommitInterval,
-                                                Promise.successful(Done))
+                                                Promise())
       )
       .mapAsync(1)(identity)
 
