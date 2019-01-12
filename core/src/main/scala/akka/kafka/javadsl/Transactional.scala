@@ -7,17 +7,18 @@ package akka.kafka.javadsl
 
 import java.util.concurrent.CompletionStage
 
-import akka.japi.Pair
+import akka.japi.tuple.Tuple3
 import akka.kafka.ConsumerMessage.TransactionalMessage
 import akka.kafka.ProducerMessage._
 import akka.kafka._
-import akka.kafka.internal.{ConsumerControlAsJava, TransactionalSubSource}
+import akka.kafka.internal.ConsumerControlAsJava
 import akka.kafka.javadsl.Consumer.Control
 import akka.stream.javadsl.{Flow, Sink, Source}
 import akka.{Done, NotUsed}
 import org.apache.kafka.common.TopicPartition
 
 import scala.compat.java8.FutureConverters.FutureOps
+import scala.concurrent.Promise
 
 /**
  *  Akka Stream connector to support transactions between Kafka topics.
@@ -37,7 +38,8 @@ object Transactional {
 
   /**
    * The `partitionedSource` is a way to track automatic partition assignment from kafka.
-   * When a topic-partition is assigned to a consumer, this source will emit tuples with the assigned topic-partition and a corresponding
+   * When a topic-partition is assigned to a consumer, this source will emit tuples with the assigned topic-partition,
+   * a promise that should be passed to the [[Transactional.sink]] or [[Transactional.flow]] and a corresponding
    * source of `TransactionalMessage`s. Each source is setup for for Exactly Only Once (EoS) kafka message semantics.
    * To enable EoS it's necessary to use the [[Transactional.sink]] or [[Transactional.flow]] (for passthrough).
    * When a topic-partition is revoked, the corresponding source completes.
@@ -48,11 +50,11 @@ object Transactional {
   def partitionedSource[K, V](
       consumerSettings: ConsumerSettings[K, V],
       subscription: AutoSubscription
-  ): Source[Pair[TopicPartition, Source[TransactionalMessage[K, V], NotUsed]], Control] =
+  ): Source[Tuple3[TopicPartition, Promise[Done], Source[TransactionalMessage[K, V], NotUsed]], Control] =
     scaladsl.Transactional
       .partitionedSource(consumerSettings, subscription)
       .map {
-        case (tp, source) => Pair(tp, source.asJava)
+        case (tp, promise, source) => Tuple3(tp, promise, source.asJava)
       }
       .mapMaterializedValue(new ConsumerControlAsJava(_))
       .asJava
@@ -71,6 +73,20 @@ object Transactional {
       .asJava
 
   /**
+   * Sink that is aware of the [[ConsumerMessage.TransactionalMessage.partitionOffset]] from a [[Transactional.source]].  It will
+   * initialize, begin, produce, and commit the consumer offset as part of a transaction.
+   */
+  def sink[K, V, IN <: Envelope[K, V, ConsumerMessage.PartitionOffset]](
+      settings: ProducerSettings[K, V],
+      transactionalId: String,
+      promise: Promise[Done]
+  ): Sink[IN, CompletionStage[Done]] =
+    scaladsl.Transactional
+      .sink(settings, transactionalId, promise)
+      .mapMaterializedValue(_.toJava)
+      .asJava
+
+  /**
    * Publish records to Kafka topics and then continue the flow.  The flow can only used with a [[Transactional.source]] that
    * emits a [[ConsumerMessage.TransactionalMessage]].  The flow requires a unique `transactional.id` across all app
    * instances.  The flow will override producer properties to enable Kafka exactly once transactional support.
@@ -80,5 +96,17 @@ object Transactional {
       transactionalId: String
   ): Flow[IN, Results[K, V, ConsumerMessage.PartitionOffset], NotUsed] =
     scaladsl.Transactional.flow(settings, transactionalId).asJava
+
+  /**
+   * Publish records to Kafka topics and then continue the flow.  The flow can only used with a [[Transactional.source]] that
+   * emits a [[ConsumerMessage.TransactionalMessage]].  The flow requires a unique `transactional.id` across all app
+   * instances.  The flow will override producer properties to enable Kafka exactly once transactional support.
+   */
+  def flow[K, V, IN <: Envelope[K, V, ConsumerMessage.PartitionOffset]](
+      settings: ProducerSettings[K, V],
+      transactionalId: String,
+      promise: Promise[Done]
+  ): Flow[IN, Results[K, V, ConsumerMessage.PartitionOffset], NotUsed] =
+    scaladsl.Transactional.flow(settings, transactionalId, promise).asJava
 
 }

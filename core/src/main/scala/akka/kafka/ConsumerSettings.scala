@@ -61,6 +61,7 @@ object ConsumerSettings {
     val pollInterval = config.getDuration("poll-interval").asScala
     val pollTimeout = config.getDuration("poll-timeout").asScala
     val stopTimeout = config.getDuration("stop-timeout").asScala
+    val transactionalStreamStopTimeout = config.getDuration("transactional-stream-stop-timeout").asScala
     val closeTimeout = config.getDuration("close-timeout").asScala
     val commitTimeout = config.getDuration("commit-timeout").asScala
     val commitTimeWarning = config.getDuration("commit-time-warning").asScala
@@ -77,6 +78,7 @@ object ConsumerSettings {
       pollInterval,
       pollTimeout,
       stopTimeout,
+      transactionalStreamStopTimeout,
       closeTimeout,
       commitTimeout,
       commitRefreshInterval,
@@ -187,6 +189,7 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
     val pollInterval: FiniteDuration,
     val pollTimeout: FiniteDuration,
     val stopTimeout: FiniteDuration,
+    val transactionalStreamStopTimeout: FiniteDuration,
     val closeTimeout: FiniteDuration,
     val commitTimeout: FiniteDuration,
     val commitRefreshInterval: Duration,
@@ -206,6 +209,7 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
            pollInterval: FiniteDuration,
            pollTimeout: FiniteDuration,
            stopTimeout: FiniteDuration,
+           transactionalStreamStopTimeout: FiniteDuration,
            closeTimeout: FiniteDuration,
            commitTimeout: FiniteDuration,
            wakeupTimeout: FiniteDuration,
@@ -221,6 +225,7 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
     pollInterval,
     pollTimeout,
     stopTimeout,
+    transactionalStreamStopTimeout,
     closeTimeout,
     commitTimeout,
     commitRefreshInterval,
@@ -330,6 +335,21 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
    */
   def withStopTimeout(stopTimeout: java.time.Duration): ConsumerSettings[K, V] =
     copy(stopTimeout = stopTimeout.asScala)
+
+  /**
+   * The timeout waiting for the transactional partitioned streams that close
+   * on every rebalance when revoking the partitions.
+   */
+  def withTransactionalStreamStopTimeout(transactionalStreamStopTimeout: FiniteDuration): ConsumerSettings[K, V] =
+    copy(stopTimeout = stopTimeout)
+
+  /**
+   * Java API:
+   * The timeout waiting for the transactional partitioned streams that close
+   * on every rebalance when revoking the partitions.
+   */
+  def withTransactionalStreamStopTimeout(transactionalStreamStopTimeout: java.time.Duration): ConsumerSettings[K, V] =
+    copy(transactionalStreamStopTimeout = transactionalStreamStopTimeout.asScala)
 
   /**
    * Set duration to wait for `KafkaConsumer.close` to finish.
@@ -486,6 +506,7 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
       pollInterval: FiniteDuration = pollInterval,
       pollTimeout: FiniteDuration = pollTimeout,
       stopTimeout: FiniteDuration = stopTimeout,
+      transactionalStreamStopTimeout: FiniteDuration = transactionalStreamStopTimeout,
       closeTimeout: FiniteDuration = closeTimeout,
       commitTimeout: FiniteDuration = commitTimeout,
       commitTimeWarning: FiniteDuration = commitTimeWarning,
@@ -504,6 +525,7 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
       pollInterval,
       pollTimeout,
       stopTimeout,
+      transactionalStreamStopTimeout,
       closeTimeout,
       commitTimeout,
       commitRefreshInterval,
@@ -529,12 +551,13 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
     s"pollInterval=${pollInterval.toCoarsest}," +
     s"pollTimeout=${pollTimeout.toCoarsest}," +
     s"stopTimeout=${stopTimeout.toCoarsest}," +
-    s"closeTimeout=${closeTimeout.toCoarsest}," +
-    s"commitTimeout=${commitTimeout.toCoarsest}," +
-    s"commitRefreshInterval=${commitRefreshInterval.toCoarsest}," +
-    s"dispatcher=$dispatcher," +
-    s"commitTimeWarning=${commitTimeWarning.toCoarsest}," +
-    s"waitClosePartition=${waitClosePartition.toCoarsest}," +
-    s"metadataRequestTimeout=${metadataRequestTimeout.toCoarsest}" +
-    ")"
+    s"transactionalStreamStopTimeout=${transactionalStreamStopTimeout.toCoarsest}"
+  s"closeTimeout=${closeTimeout.toCoarsest}," +
+  s"commitTimeout=${commitTimeout.toCoarsest}," +
+  s"commitRefreshInterval=${commitRefreshInterval.toCoarsest}," +
+  s"dispatcher=$dispatcher," +
+  s"commitTimeWarning=${commitTimeWarning.toCoarsest}," +
+  s"waitClosePartition=${waitClosePartition.toCoarsest}," +
+  s"metadataRequestTimeout=${metadataRequestTimeout.toCoarsest}" +
+  ")"
 }

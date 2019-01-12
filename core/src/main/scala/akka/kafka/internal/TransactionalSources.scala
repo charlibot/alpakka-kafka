@@ -6,7 +6,7 @@
 package akka.kafka.internal
 import java.util.Locale
 
-import akka.NotUsed
+import akka.{Done, NotUsed}
 import akka.annotation.InternalApi
 import akka.kafka.ConsumerMessage.TransactionalMessage
 import akka.kafka.scaladsl.Consumer.Control
@@ -17,6 +17,8 @@ import akka.stream.stage.GraphStageLogic
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.requests.IsolationLevel
+
+import scala.concurrent.Promise
 
 /** Internal API */
 @InternalApi
@@ -50,7 +52,7 @@ private[kafka] final class TransactionalSource[K, V](consumerSettings: ConsumerS
 @InternalApi
 private[kafka] final class TransactionalSubSource[K, V](consumerSettings: ConsumerSettings[K, V],
                                                         subscription: AutoSubscription)
-    extends KafkaSourceStage[K, V, (TopicPartition, Source[TransactionalMessage[K, V], NotUsed])](
+    extends KafkaSourceStage[K, V, (TopicPartition, Promise[Done], Source[TransactionalMessage[K, V], NotUsed])](
       s"TransactionalSubSource ${subscription.renderStageAttribute}"
     ) {
   require(consumerSettings.properties(ConsumerConfig.GROUP_ID_CONFIG).nonEmpty, "You must define a Consumer group.id.")
@@ -68,9 +70,9 @@ private[kafka] final class TransactionalSubSource[K, V](consumerSettings: Consum
   )
 
   override protected def logic(
-      shape: SourceShape[(TopicPartition, Source[TransactionalMessage[K, V], NotUsed])]
+      shape: SourceShape[(TopicPartition, Promise[Done], Source[TransactionalMessage[K, V], NotUsed])]
   ): GraphStageLogic with Control =
-    new SubSourceLogic[K, V, TransactionalMessage[K, V]](shape, txConsumerSettings, subscription)
+    new TransactionalSubSourceLogic[K, V, TransactionalMessage[K, V]](shape, txConsumerSettings, subscription)
     with TransactionalMessageBuilder[K, V] {
       override def groupId: String = txConsumerSettings.properties(ConsumerConfig.GROUP_ID_CONFIG)
     }

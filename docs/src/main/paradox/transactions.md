@@ -58,7 +58,7 @@ Java
 (@scala[@scaladoc[Transactional API](akka.kafka.scaladsl.Transactional$)]@java[@scaladoc[Transactional API](akka.kafka.javadsl.Transactional$)])
  support tracking the automatic partition assignment from Kafka. When a topic-partition is assigned to a consumer, this source will emit a tuple with the assigned topic-partition and a corresponding source. When a topic-partition is revoked, the corresponding source completes.
  
-By generating the `transactional.id` from the [[TopicPartition]], multiple instances of your application can run without having to manually assign partitions to each instance.
+By generating the `transactional.id` from the [[TopicPartition]] and passing the [[Promise]] to the `flow` or `sink`, multiple instances of your application can run without having to manually assign partitions to each instance.
 
 Scala
 : @@ snip [snip](/tests/src/test/scala/docs/scaladsl/TransactionsExample.scala) { #partitionedTransactionalSink }

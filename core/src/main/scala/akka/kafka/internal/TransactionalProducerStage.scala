@@ -4,6 +4,7 @@
  */
 
 package akka.kafka.internal
+import akka.Done
 import akka.annotation.InternalApi
 import akka.kafka.ConsumerMessage
 import akka.kafka.ConsumerMessage.{GroupTopicPartition, PartitionOffset}
@@ -15,7 +16,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.clients.producer.Producer
 import org.apache.kafka.common.TopicPartition
 
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.duration._
 import scala.collection.JavaConverters._
@@ -28,12 +29,13 @@ private[kafka] final class TransactionalProducerStage[K, V, P](
     val closeTimeout: FiniteDuration,
     val closeProducerOnStop: Boolean,
     val producerProvider: () => Producer[K, V],
-    commitInterval: FiniteDuration
+    commitInterval: FiniteDuration,
+    promise: Promise[Done]
 ) extends GraphStage[FlowShape[Envelope[K, V, P], Future[Results[K, V, P]]]]
     with ProducerStage[K, V, P, Envelope[K, V, P], Results[K, V, P]] {
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
-    new TransactionalProducerStageLogic(this, producerProvider(), inheritedAttributes, commitInterval)
+    new TransactionalProducerStageLogic(this, producerProvider(), inheritedAttributes, commitInterval, promise)
 }
 
 /** Internal API */
@@ -80,7 +82,8 @@ private object TransactionalProducerStage {
 private final class TransactionalProducerStageLogic[K, V, P](stage: TransactionalProducerStage[K, V, P],
                                                              producer: Producer[K, V],
                                                              inheritedAttributes: Attributes,
-                                                             commitInterval: FiniteDuration)
+                                                             commitInterval: FiniteDuration,
+                                                             promise: Promise[Done])
     extends DefaultProducerStageLogic[K, V, P, Envelope[K, V, P], Results[K, V, P]](stage,
                                                                                     producer,
                                                                                     inheritedAttributes)
@@ -149,12 +152,14 @@ private final class TransactionalProducerStageLogic[K, V, P](stage: Transactiona
     log.debug("Committing final transaction before shutdown")
     cancelTimer(commitSchedulerKey)
     maybeCommitTransaction(beginNewTransaction = false)
+    promise.success(Done)
     super.onCompletionSuccess()
   }
 
   override def onCompletionFailure(ex: Throwable): Unit = {
     log.debug("Aborting transaction due to stage failure")
     abortTransaction()
+    promise.failure(ex)
     super.onCompletionFailure(ex)
   }
 

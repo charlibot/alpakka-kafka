@@ -147,14 +147,14 @@ public class TransactionsExampleTest extends EmbeddedKafkaJunit4Test {
     // #partitionedTransactionalSink
     Consumer.DrainingControl<Done> control =
         Transactional.partitionedSource(consumerSettings, Subscriptions.topics(sourceTopic))
-            .mapAsync(8, pair -> {
-                Source<ConsumerMessage.TransactionalMessage<String, String>, NotUsed> source = pair.second();
+            .mapAsync(8, tuple -> {
+                Source<ConsumerMessage.TransactionalMessage<String, String>, NotUsed> source = tuple.t3();
                 return source
                     .via(business())
                     .map(msg -> ProducerMessage.single(
                                             new ProducerRecord<>(targetTopic, msg.record().key(), msg.record().value()),
                                             msg.partitionOffset()))
-                    .runWith(Transactional.sink(producerSettings, transactionalId + "-" + pair.first()), materializer);
+                    .runWith(Transactional.sink(producerSettings, transactionalId + "-" + tuple.t1(), tuple.t2()), materializer);
             })
             .toMat(Sink.ignore(), Keep.both())
             .mapMaterializedValue(Consumer::createDrainingControl)

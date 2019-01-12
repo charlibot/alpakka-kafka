@@ -16,7 +16,7 @@ import akka.{Done, NotUsed}
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.TopicPartition
 
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
 
 /**
  * Akka Stream connector to support transactions between Kafka topics.
@@ -33,7 +33,8 @@ object Transactional {
 
   /**
    * The `partitionedSource` is a way to track automatic partition assignment from kafka.
-   * When a topic-partition is assigned to a consumer, this source will emit tuples with the assigned topic-partition and a corresponding
+   * When a topic-partition is assigned to a consumer, this source will emit tuples with the assigned topic-partition,
+   * a promise that should be passed to the [[Transactional.sink]] or [[Transactional.flow]] and a corresponding
    * source of `TransactionalMessage`s. Each source is setup for for Exactly Only Once (EoS) kafka message semantics.
    * To enable EoS it's necessary to use the [[Transactional.sink]] or [[Transactional.flow]] (for passthrough).
    * When a topic-partition is revoked, the corresponding source completes.
@@ -44,7 +45,7 @@ object Transactional {
   def partitionedSource[K, V](
       settings: ConsumerSettings[K, V],
       subscription: AutoSubscription
-  ): Source[(TopicPartition, Source[TransactionalMessage[K, V], NotUsed]), Control] =
+  ): Source[(TopicPartition, Promise[Done], Source[TransactionalMessage[K, V], NotUsed]), Control] =
     Source.fromGraph(new TransactionalSubSource[K, V](settings, subscription))
 
   /**
@@ -53,9 +54,10 @@ object Transactional {
    */
   def sink[K, V](
       settings: ProducerSettings[K, V],
-      transactionalId: String
+      transactionalId: String,
+      promise: Promise[Done] = Promise.successful(Done)
   ): Sink[Envelope[K, V, ConsumerMessage.PartitionOffset], Future[Done]] =
-    flow(settings, transactionalId).toMat(Sink.ignore)(Keep.right)
+    flow(settings, transactionalId, promise).toMat(Sink.ignore)(Keep.right)
 
   /**
    * Publish records to Kafka topics and then continue the flow.  The flow should only used with a [[Transactional.source]] that
@@ -64,7 +66,8 @@ object Transactional {
    */
   def flow[K, V](
       settings: ProducerSettings[K, V],
-      transactionalId: String
+      transactionalId: String,
+      promise: Promise[Done] = Promise.successful(Done)
   ): Flow[Envelope[K, V, ConsumerMessage.PartitionOffset], Results[K, V, ConsumerMessage.PartitionOffset], NotUsed] = {
     require(transactionalId != null && transactionalId.length > 0, "You must define a Transactional id.")
 
@@ -80,7 +83,8 @@ object Transactional {
           txSettings.closeTimeout,
           closeProducerOnStop = true,
           () => txSettings.createKafkaProducer(),
-          settings.eosCommitInterval
+          settings.eosCommitInterval,
+          promise
         )
       )
       .mapAsync(txSettings.parallelism)(identity)
