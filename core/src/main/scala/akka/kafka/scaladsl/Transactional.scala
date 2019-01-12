@@ -55,7 +55,7 @@ object Transactional {
   def sink[K, V](
       settings: ProducerSettings[K, V],
       transactionalId: String,
-      promise: Promise[Done] = Promise.successful(Done)
+      promise: Promise[Done] = Promise()
   ): Sink[Envelope[K, V, ConsumerMessage.PartitionOffset], Future[Done]] =
     flow(settings, transactionalId, promise).toMat(Sink.ignore)(Keep.right)
 
@@ -67,7 +67,7 @@ object Transactional {
   def flow[K, V](
       settings: ProducerSettings[K, V],
       transactionalId: String,
-      promise: Promise[Done] = Promise.successful(Done)
+      promise: Promise[Done] = Promise()
   ): Flow[Envelope[K, V, ConsumerMessage.PartitionOffset], Results[K, V, ConsumerMessage.PartitionOffset], NotUsed] = {
     require(transactionalId != null && transactionalId.length > 0, "You must define a Transactional id.")
 
