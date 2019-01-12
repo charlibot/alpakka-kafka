@@ -140,22 +140,31 @@ public class TransactionsExampleTest extends EmbeddedKafkaJunit4Test {
   @Test
   public void partitionedSourceSink() throws Exception {
     ConsumerSettings<String, String> consumerSettings =
-            consumerDefaults().withGroupId(createGroupId(1));
+        consumerDefaults().withGroupId(createGroupId(1));
     String sourceTopic = createTopic(1, 1, 1);
     String targetTopic = createTopic(2, 1, 1);
     String transactionalId = createTransactionalId(1);
     // #partitionedTransactionalSink
     Consumer.DrainingControl<Done> control =
         Transactional.partitionedSource(consumerSettings, Subscriptions.topics(sourceTopic))
-            .mapAsync(8, tuple -> {
-                Source<ConsumerMessage.TransactionalMessage<String, String>, NotUsed> source = tuple.t3();
-                return source
-                    .via(business())
-                    .map(msg -> ProducerMessage.single(
-                                            new ProducerRecord<>(targetTopic, msg.record().key(), msg.record().value()),
-                                            msg.partitionOffset()))
-                    .runWith(Transactional.sink(producerSettings, transactionalId + "-" + tuple.t1(), tuple.t2()), materializer);
-            })
+            .mapAsync(
+                8,
+                tuple -> {
+                  Source<ConsumerMessage.TransactionalMessage<String, String>, NotUsed> source =
+                      tuple.t3();
+                  return source
+                      .via(business())
+                      .map(
+                          msg ->
+                              ProducerMessage.single(
+                                  new ProducerRecord<>(
+                                      targetTopic, msg.record().key(), msg.record().value()),
+                                  msg.partitionOffset()))
+                      .runWith(
+                          Transactional.sink(
+                              producerSettings, transactionalId + "-" + tuple.t1(), tuple.t2()),
+                          materializer);
+                })
             .toMat(Sink.ignore(), Keep.both())
             .mapMaterializedValue(Consumer::createDrainingControl)
             .run(materializer);
@@ -164,7 +173,7 @@ public class TransactionsExampleTest extends EmbeddedKafkaJunit4Test {
 
     // #partitionedTransactionalSink
     Consumer.DrainingControl<List<ConsumerRecord<String, String>>> consumer =
-            consumeString(targetTopic, 10);
+        consumeString(targetTopic, 10);
     produceString(sourceTopic, 10, partition0());
     assertDone(consumer.isShutdown());
     // #partitionedTransactionalSink

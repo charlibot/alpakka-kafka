@@ -111,13 +111,15 @@ class TransactionsExample extends DocsSpecBase(KafkaPorts.ScalaTransactionsExamp
     val control =
       Transactional
         .partitionedSource(consumerSettings, Subscriptions.topics(sourceTopic))
-        .mapAsyncUnordered(8) { case (tp, promise, source) =>
-          source
-            .via(businessFlow)
-            .map { msg =>
-              ProducerMessage.single(new ProducerRecord(sinkTopic, msg.record.key, msg.record.value), msg.partitionOffset)
-            }
-            .runWith(Transactional.sink(producerSettings, transactionalId + "-" + tp, promise))
+        .mapAsyncUnordered(8) {
+          case (tp, promise, source) =>
+            source
+              .via(businessFlow)
+              .map { msg =>
+                ProducerMessage.single(new ProducerRecord(sinkTopic, msg.record.key, msg.record.value),
+                                       msg.partitionOffset)
+              }
+              .runWith(Transactional.sink(producerSettings, transactionalId + "-" + tp, promise))
         }
         .toMat(Sink.ignore)(Keep.both)
         .mapMaterializedValue(DrainingControl.apply)

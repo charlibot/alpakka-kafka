@@ -103,7 +103,8 @@ class ProducerSpec(_system: ActorSystem)
         new TransactionalProducerStage[K, V, P](settings.closeTimeout,
                                                 closeOnStop,
                                                 () => mock.mock,
-                                                settings.eosCommitInterval)
+                                                settings.eosCommitInterval,
+                                                Promise.successful(Done))
       )
       .mapAsync(1)(identity)
 
