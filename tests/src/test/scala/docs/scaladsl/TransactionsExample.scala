@@ -105,13 +105,15 @@ class TransactionsExample extends DocsSpecBase(KafkaPorts.ScalaTransactionsExamp
   "Partitioned transactional sink" should "work" in {
     val consumerSettings = consumerDefaults.withGroupId(createGroupId())
     val producerSettings = producerDefaults
-    val immutable.Seq(sourceTopic, sinkTopic) = createTopics(1, 2)
+    val maxPartitions = 2
+    val sourceTopic = createTopic(1, maxPartitions, 1)
+    val sinkTopic = createTopicName(2)
     val transactionalId = createTransactionalId()
     // #partitionedTransactionalSink
     val control =
       Transactional
         .partitionedSource(consumerSettings, Subscriptions.topics(sourceTopic))
-        .mapAsyncUnordered(8) {
+        .mapAsyncUnordered(maxPartitions) {
           case (tp, promise, source) =>
             source
               .via(businessFlow)
