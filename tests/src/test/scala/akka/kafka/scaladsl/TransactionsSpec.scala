@@ -75,7 +75,7 @@ class TransactionsSpec extends SpecBase(kafkaPort = KafkaPorts.TransactionsSpec)
 
     "complete with partitioned source" in {
       assertAllStagesStopped {
-        val sourceTopic = createTopicName(1)
+        val sourceTopic = createTopic(1, 2, 1)
         val sinkTopic = createTopicName(2)
         val group = createGroupId(1)
 

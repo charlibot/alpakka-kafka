@@ -141,7 +141,7 @@ public class TransactionsExampleTest extends EmbeddedKafkaJunit4Test {
   public void partitionedSourceSink() throws Exception {
     ConsumerSettings<String, String> consumerSettings =
         consumerDefaults().withGroupId(createGroupId(1));
-    String sourceTopic = createTopic(1, 1, 1);
+    String sourceTopic = createTopic(1, 2, 1);
     String targetTopic = createTopic(2, 1, 1);
     String transactionalId = createTransactionalId(1);
     // #partitionedTransactionalSink
