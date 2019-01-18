@@ -21,6 +21,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.AfterClass;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
@@ -46,7 +47,7 @@ public class TransactionsExampleTest extends EmbeddedKafkaJunit4Test {
   }
 
   protected void assertDone(CompletionStage<Done> stage) throws Exception {
-    assertEquals(Done.done(), resultOf(stage));
+    assertEquals(Done.done(), resultOf(stage, Duration.ofSeconds(10)));
   }
 
   protected <T> Flow<T, T, NotUsed> business() {
@@ -174,7 +175,7 @@ public class TransactionsExampleTest extends EmbeddedKafkaJunit4Test {
     // #partitionedTransactionalSink
     Consumer.DrainingControl<List<ConsumerRecord<String, String>>> consumer =
         consumeString(targetTopic, 10);
-    produceString(sourceTopic, 10, partition0());
+    produceString(sourceTopic, 10, partition0);
     assertDone(consumer.isShutdown());
     // #partitionedTransactionalSink
     control.drainAndShutdown(ec);

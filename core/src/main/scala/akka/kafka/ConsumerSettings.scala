@@ -61,7 +61,7 @@ object ConsumerSettings {
     val pollInterval = config.getDuration("poll-interval").asScala
     val pollTimeout = config.getDuration("poll-timeout").asScala
     val stopTimeout = config.getDuration("stop-timeout").asScala
-    val transactionalStreamStopTimeout = config.getDuration("transactional-stream-stop-timeout").asScala
+    val transactionalStreamStopTimeout = config.getDuration("eos-stream-stop-timeout").asScala
     val closeTimeout = config.getDuration("close-timeout").asScala
     val commitTimeout = config.getDuration("commit-timeout").asScala
     val commitTimeWarning = config.getDuration("commit-time-warning").asScala
