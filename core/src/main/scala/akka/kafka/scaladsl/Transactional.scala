@@ -55,9 +55,9 @@ object Transactional {
   def sink[K, V](
       settings: ProducerSettings[K, V],
       transactionalId: String,
-      promise: Promise[Done] = Promise()
+      streamCompletePromise: Promise[Done] = Promise()
   ): Sink[Envelope[K, V, ConsumerMessage.PartitionOffset], Future[Done]] =
-    flow(settings, transactionalId, promise).toMat(Sink.ignore)(Keep.right)
+    flow(settings, transactionalId, streamCompletePromise).toMat(Sink.ignore)(Keep.right)
 
   /**
    * Publish records to Kafka topics and then continue the flow.  The flow should only used with a [[Transactional.source]] that
@@ -67,7 +67,7 @@ object Transactional {
   def flow[K, V](
       settings: ProducerSettings[K, V],
       transactionalId: String,
-      promise: Promise[Done] = Promise()
+      streamCompletePromise: Promise[Done] = Promise()
   ): Flow[Envelope[K, V, ConsumerMessage.PartitionOffset], Results[K, V, ConsumerMessage.PartitionOffset], NotUsed] = {
     require(transactionalId != null && transactionalId.length > 0, "You must define a Transactional id.")
 
@@ -84,7 +84,7 @@ object Transactional {
           closeProducerOnStop = true,
           () => txSettings.createKafkaProducer(),
           settings.eosCommitInterval,
-          promise
+          streamCompletePromise
         )
       )
       .mapAsync(txSettings.parallelism)(identity)

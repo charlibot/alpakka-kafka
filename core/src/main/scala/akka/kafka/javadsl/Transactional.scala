@@ -54,7 +54,7 @@ object Transactional {
     scaladsl.Transactional
       .partitionedSource(consumerSettings, subscription)
       .map {
-        case (tp, promise, source) => Tuple3(tp, promise, source.asJava)
+        case (tp, streamCompletePromise, source) => Tuple3(tp, streamCompletePromise, source.asJava)
       }
       .mapMaterializedValue(new ConsumerControlAsJava(_))
       .asJava
@@ -79,10 +79,10 @@ object Transactional {
   def sink[K, V, IN <: Envelope[K, V, ConsumerMessage.PartitionOffset]](
       settings: ProducerSettings[K, V],
       transactionalId: String,
-      promise: Promise[Done]
+      streamCompletePromise: Promise[Done]
   ): Sink[IN, CompletionStage[Done]] =
     scaladsl.Transactional
-      .sink(settings, transactionalId, promise)
+      .sink(settings, transactionalId, streamCompletePromise)
       .mapMaterializedValue(_.toJava)
       .asJava
 
@@ -105,8 +105,8 @@ object Transactional {
   def flow[K, V, IN <: Envelope[K, V, ConsumerMessage.PartitionOffset]](
       settings: ProducerSettings[K, V],
       transactionalId: String,
-      promise: Promise[Done]
+      streamCompletePromise: Promise[Done]
   ): Flow[IN, Results[K, V, ConsumerMessage.PartitionOffset], NotUsed] =
-    scaladsl.Transactional.flow(settings, transactionalId, promise).asJava
+    scaladsl.Transactional.flow(settings, transactionalId, streamCompletePromise).asJava
 
 }

@@ -89,14 +89,14 @@ class TransactionsSpec extends SpecBase(kafkaPort = KafkaPorts.TransactionsSpec)
         val control = Transactional
           .partitionedSource(consumerSettings, TopicSubscription(Set(sourceTopic), None))
           .mapAsyncUnordered(8) {
-            case (tp, promise, source) =>
+            case (tp, streamCompletePromise, source) =>
               source
                 .filterNot(_.record.value() == InitialMsg)
                 .map { msg =>
                   ProducerMessage.single(new ProducerRecord[String, String](sinkTopic, msg.record.value),
                                          msg.partitionOffset)
                 }
-                .runWith(Transactional.sink(producerDefaults, group + "-" + tp, promise))
+                .runWith(Transactional.sink(producerDefaults, group + "-" + tp, streamCompletePromise))
           }
           .toMat(Sink.ignore)(Keep.left)
           .run()

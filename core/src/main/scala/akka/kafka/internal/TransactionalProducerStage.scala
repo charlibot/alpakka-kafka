@@ -83,7 +83,7 @@ private final class TransactionalProducerStageLogic[K, V, P](stage: Transactiona
                                                              producer: Producer[K, V],
                                                              inheritedAttributes: Attributes,
                                                              commitInterval: FiniteDuration,
-                                                             promise: Promise[Done])
+                                                             streamCompletePromise: Promise[Done])
     extends DefaultProducerStageLogic[K, V, P, Envelope[K, V, P], Results[K, V, P]](stage,
                                                                                     producer,
                                                                                     inheritedAttributes)
@@ -152,14 +152,14 @@ private final class TransactionalProducerStageLogic[K, V, P](stage: Transactiona
     log.debug("Committing final transaction before shutdown")
     cancelTimer(commitSchedulerKey)
     maybeCommitTransaction(beginNewTransaction = false)
-    promise.success(Done)
+    streamCompletePromise.success(Done)
     super.onCompletionSuccess()
   }
 
   override def onCompletionFailure(ex: Throwable): Unit = {
     log.debug("Aborting transaction due to stage failure")
     abortTransaction()
-    promise.failure(ex)
+    streamCompletePromise.failure(ex)
     super.onCompletionFailure(ex)
   }
 
