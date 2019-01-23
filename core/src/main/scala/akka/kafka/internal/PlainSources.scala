@@ -4,7 +4,7 @@
  */
 
 package akka.kafka.internal
-import akka.NotUsed
+import akka.{Done, NotUsed}
 import akka.actor.ActorRef
 import akka.annotation.InternalApi
 import akka.kafka.scaladsl.Consumer.Control
@@ -15,7 +15,7 @@ import akka.stream.stage.GraphStageLogic
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
 
 /** Internal API */
 @InternalApi
@@ -45,11 +45,11 @@ private[kafka] final class PlainSubSource[K, V](
     subscription: AutoSubscription,
     getOffsetsOnAssign: Option[Set[TopicPartition] => Future[Map[TopicPartition, Long]]],
     onRevoke: Set[TopicPartition] => Unit
-) extends KafkaSourceStage[K, V, (TopicPartition, Source[ConsumerRecord[K, V], NotUsed])](
+) extends KafkaSourceStage[K, V, (TopicPartition, Promise[Done], Source[ConsumerRecord[K, V], NotUsed])](
       s"PlainSubSource ${subscription.renderStageAttribute}"
     ) {
   override protected def logic(
-      shape: SourceShape[(TopicPartition, Source[ConsumerRecord[K, V], NotUsed])]
+      shape: SourceShape[(TopicPartition, Promise[Done], Source[ConsumerRecord[K, V], NotUsed])]
   ): GraphStageLogic with Control =
     new SubSourceLogic[K, V, ConsumerRecord[K, V]](shape, settings, subscription, getOffsetsOnAssign, onRevoke)
     with PlainMessageBuilder[K, V] with MetricsControl

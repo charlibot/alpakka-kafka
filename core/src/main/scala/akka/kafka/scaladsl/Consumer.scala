@@ -193,7 +193,9 @@ object Consumer {
       settings: ConsumerSettings[K, V],
       subscription: AutoSubscription
   ): Source[(TopicPartition, Source[ConsumerRecord[K, V], NotUsed]), Control] =
-    Source.fromGraph(new PlainSubSource[K, V](settings, subscription, None, onRevoke = _ => ()))
+    Source.fromGraph(new PlainSubSource[K, V](settings, subscription, None, onRevoke = _ => ())).map {
+      case (tp, _, source) => (tp, source)
+    }
 
   /**
    * The `plainPartitionedManualOffsetSource` is similar to [[#plainPartitionedSource]] but allows the use of an offset store outside
@@ -208,7 +210,9 @@ object Consumer {
       getOffsetsOnAssign: Set[TopicPartition] => Future[Map[TopicPartition, Long]],
       onRevoke: Set[TopicPartition] => Unit = _ => ()
   ): Source[(TopicPartition, Source[ConsumerRecord[K, V], NotUsed]), Control] =
-    Source.fromGraph(new PlainSubSource[K, V](settings, subscription, Some(getOffsetsOnAssign), onRevoke))
+    Source.fromGraph(new PlainSubSource[K, V](settings, subscription, Some(getOffsetsOnAssign), onRevoke)).map {
+      case (tp, _, source) => (tp, source)
+    }
 
   /**
    * The same as [[#plainPartitionedSource]] but with offset commit support
@@ -217,7 +221,9 @@ object Consumer {
       settings: ConsumerSettings[K, V],
       subscription: AutoSubscription
   ): Source[(TopicPartition, Source[CommittableMessage[K, V], NotUsed]), Control] =
-    Source.fromGraph(new CommittableSubSource[K, V](settings, subscription))
+    Source.fromGraph(new CommittableSubSource[K, V](settings, subscription)).map {
+      case (tp, _, source) => (tp, source)
+    }
 
   /**
    * The same as [[#plainPartitionedSource]] but with offset commit with metadata support
@@ -227,7 +233,9 @@ object Consumer {
       subscription: AutoSubscription,
       metadataFromRecord: ConsumerRecord[K, V] => String
   ): Source[(TopicPartition, Source[CommittableMessage[K, V], NotUsed]), Control] =
-    Source.fromGraph(new CommittableSubSource[K, V](settings, subscription, metadataFromRecord))
+    Source.fromGraph(new CommittableSubSource[K, V](settings, subscription, metadataFromRecord)).map {
+      case (tp, _, source) => (tp, source)
+    }
 
   /**
    * Special source that can use an external `KafkaAsyncConsumer`. This is useful when you have

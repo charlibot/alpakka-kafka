@@ -5,7 +5,7 @@
 
 package akka.kafka.internal
 
-import akka.NotUsed
+import akka.{Done, NotUsed}
 import akka.actor.Status
 import akka.actor.{ActorRef, ExtendedActorSystem, Terminated}
 import akka.annotation.InternalApi
@@ -24,21 +24,22 @@ import org.apache.kafka.common.TopicPartition
 import scala.annotation.tailrec
 import scala.collection.immutable
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success}
 
 /**
  * Internal API.
  *
- * Anonymous sub-class instance is created in [[CommittableSubSource]].
+ * Anonymous sub-class instance is created in [[CommittableSubSource]], [[PlainSubSource]] and [[TransactionalSubSource]].
  */
 @InternalApi
 private abstract class SubSourceLogic[K, V, Msg](
-    val shape: SourceShape[(TopicPartition, Source[Msg, NotUsed])],
+    val shape: SourceShape[(TopicPartition, Promise[Done], Source[Msg, NotUsed])],
     settings: ConsumerSettings[K, V],
     subscription: AutoSubscription,
     getOffsetsOnAssign: Option[Set[TopicPartition] => Future[Map[TopicPartition, Long]]] = None,
-    onRevoke: Set[TopicPartition] => Unit = _ => ()
+    onRevoke: Set[TopicPartition] => Unit = _ => (),
+    waitForStreamCompletion: Boolean = false
 ) extends TimerGraphStageLogic(shape)
     with PromiseControl
     with MetricsControl
@@ -57,8 +58,8 @@ private abstract class SubSourceLogic[K, V, Msg](
   var pendingPartitions: immutable.Set[TopicPartition] = immutable.Set.empty
 
   /** We have created a source for these partitions, but it has not started up and is not in subSources yet. */
-  var partitionsInStartup: immutable.Set[TopicPartition] = immutable.Set.empty
-  var subSources: Map[TopicPartition, Control] = immutable.Map.empty
+  var partitionsInStartup: Map[TopicPartition, Future[Done]] = immutable.Map.empty
+  var subSources: Map[TopicPartition, (Control, Future[Done])] = immutable.Map.empty
 
   /** Kafka has signalled these partitions are revoked, but some may be re-assigned just after revoking. */
   var partitionsToRevoke: Set[TopicPartition] = Set.empty
@@ -95,6 +96,15 @@ private abstract class SubSourceLogic[K, V, Msg](
             _.tell(TopicPartitionsRevoked(subscription, revokedTps), sourceActor.ref)
           }
           if (revokedTps.nonEmpty) {
+            if (waitForStreamCompletion) {
+              implicit val ec: ExecutionContext = materializer.executionContext
+              log.debug(s"Shutting down subsources for: $revokedTps")
+              val futures = revokedTps
+                .flatMap(subSources.get)
+                .map { case (control, streamFuture) => control.shutdown().flatMap(_ => streamFuture) }
+              Await.result(Future.sequence(futures), settings.transactionalStreamStopTimeout)
+              log.debug(s"Finished shutting down subsources for: $revokedTps")
+            }
             partitionRevokedCB.invoke(revokedTps)
           }
         }
@@ -177,7 +187,7 @@ private abstract class SubSourceLogic[K, V, Msg](
       onRevoke(partitionsToRevoke)
       pendingPartitions --= partitionsToRevoke
       partitionsInStartup --= partitionsToRevoke
-      partitionsToRevoke.flatMap(subSources.get).foreach(_.shutdown())
+      partitionsToRevoke.flatMap(subSources.get).foreach(_._1.shutdown())
       subSources --= partitionsToRevoke
       partitionsToRevoke = Set.empty
   }
@@ -205,7 +215,8 @@ private abstract class SubSourceLogic[K, V, Msg](
         // starting up.  Kill!
         control.shutdown()
       } else {
-        subSources += (tp -> control)
+        val future = partitionsInStartup(tp)
+        subSources += (tp -> (control -> future))
         partitionsInStartup -= tp
       }
   }
@@ -228,7 +239,8 @@ private abstract class SubSourceLogic[K, V, Msg](
       val tp = pendingPartitions.head
 
       pendingPartitions = pendingPartitions.tail
-      partitionsInStartup += tp
+      val promise = Promise[Done]()
+      partitionsInStartup += tp -> promise.future
       val subSource = Source.fromGraph(
         new SubSourceStage(tp,
                            consumerActor,
@@ -237,7 +249,7 @@ private abstract class SubSourceLogic[K, V, Msg](
                            messageBuilder = this,
                            actorNumber)
       )
-      push(shape.out, (tp, subSource))
+      push(shape.out, (tp, promise, subSource))
       emitSubSourcesForPendingPartitions()
     }
 
@@ -250,7 +262,7 @@ private abstract class SubSourceLogic[K, V, Msg](
   override def performStop(): Unit = {
     setKeepGoing(true)
     subSources.foreach {
-      case (_, control) => control.stop()
+      case (_, (control, _)) => control.stop()
     }
     complete(shape.out)
     onStop()
@@ -260,7 +272,7 @@ private abstract class SubSourceLogic[K, V, Msg](
     setKeepGoing(true)
     //todo we should wait for subsources to be shutdown and next shutdown main stage
     subSources.foreach {
-      case (_, control) => control.shutdown()
+      case (_, (control, _)) => control.shutdown()
     }
 
     if (!isClosed(shape.out)) {

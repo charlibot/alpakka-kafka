@@ -23,7 +23,7 @@ import org.apache.kafka.common.requests.OffsetFetchResponse
 
 import scala.collection.immutable
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 
 /** Internal API */
 @InternalApi
@@ -73,11 +73,11 @@ private[kafka] final class CommittableSubSource[K, V](settings: ConsumerSettings
                                                       subscription: AutoSubscription,
                                                       _metadataFromRecord: ConsumerRecord[K, V] => String =
                                                         (_: ConsumerRecord[K, V]) => OffsetFetchResponse.NO_METADATA)
-    extends KafkaSourceStage[K, V, (TopicPartition, Source[CommittableMessage[K, V], NotUsed])](
+    extends KafkaSourceStage[K, V, (TopicPartition, Promise[Done], Source[CommittableMessage[K, V], NotUsed])](
       s"CommittableSubSource ${subscription.renderStageAttribute}"
     ) {
   override protected def logic(
-      shape: SourceShape[(TopicPartition, Source[CommittableMessage[K, V], NotUsed])]
+      shape: SourceShape[(TopicPartition, Promise[Done], Source[CommittableMessage[K, V], NotUsed])]
   ): GraphStageLogic with Control =
     new SubSourceLogic[K, V, CommittableMessage[K, V]](shape, settings, subscription)
     with CommittableMessageBuilder[K, V] with MetricsControl {

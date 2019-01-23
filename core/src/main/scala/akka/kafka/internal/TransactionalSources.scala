@@ -72,7 +72,10 @@ private[kafka] final class TransactionalSubSource[K, V](consumerSettings: Consum
   override protected def logic(
       shape: SourceShape[(TopicPartition, Promise[Done], Source[TransactionalMessage[K, V], NotUsed])]
   ): GraphStageLogic with Control =
-    new TransactionalSubSourceLogic[K, V, TransactionalMessage[K, V]](shape, txConsumerSettings, subscription)
+    new SubSourceLogic[K, V, TransactionalMessage[K, V]](shape,
+                                                         txConsumerSettings,
+                                                         subscription,
+                                                         waitForStreamCompletion = true)
     with TransactionalMessageBuilder[K, V] {
       override def groupId: String = txConsumerSettings.properties(ConsumerConfig.GROUP_ID_CONFIG)
     }
