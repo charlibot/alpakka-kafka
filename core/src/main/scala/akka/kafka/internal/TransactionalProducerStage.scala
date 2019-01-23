@@ -30,12 +30,16 @@ private[kafka] final class TransactionalProducerStage[K, V, P](
     val closeProducerOnStop: Boolean,
     val producerProvider: () => Producer[K, V],
     commitInterval: FiniteDuration,
-    promise: Promise[Done]
+    streamCompletePromise: Promise[Done]
 ) extends GraphStage[FlowShape[Envelope[K, V, P], Future[Results[K, V, P]]]]
     with ProducerStage[K, V, P, Envelope[K, V, P], Results[K, V, P]] {
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
-    new TransactionalProducerStageLogic(this, producerProvider(), inheritedAttributes, commitInterval, promise)
+    new TransactionalProducerStageLogic(this,
+                                        producerProvider(),
+                                        inheritedAttributes,
+                                        commitInterval,
+                                        streamCompletePromise)
 }
 
 /** Internal API */

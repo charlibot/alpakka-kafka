@@ -239,8 +239,8 @@ private abstract class SubSourceLogic[K, V, Msg](
       val tp = pendingPartitions.head
 
       pendingPartitions = pendingPartitions.tail
-      val promise = Promise[Done]()
-      partitionsInStartup += tp -> promise.future
+      val streamCompletePromise = Promise[Done]()
+      partitionsInStartup += tp -> streamCompletePromise.future
       val subSource = Source.fromGraph(
         new SubSourceStage(tp,
                            consumerActor,
@@ -249,7 +249,7 @@ private abstract class SubSourceLogic[K, V, Msg](
                            messageBuilder = this,
                            actorNumber)
       )
-      push(shape.out, (tp, promise, subSource))
+      push(shape.out, (tp, streamCompletePromise, subSource))
       emitSubSourcesForPendingPartitions()
     }
 
