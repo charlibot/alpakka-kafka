@@ -75,7 +75,8 @@ class TransactionsSpec extends SpecBase(kafkaPort = KafkaPorts.TransactionsSpec)
 
     "complete with partitioned source" in {
       assertAllStagesStopped {
-        val sourceTopic = createTopic(1, 2, 1)
+        val maxPartitions = 2
+        val sourceTopic = createTopic(1, maxPartitions, 1)
         val sinkTopic = createTopicName(2)
         val group = createGroupId(1)
 
@@ -86,20 +87,27 @@ class TransactionsSpec extends SpecBase(kafkaPort = KafkaPorts.TransactionsSpec)
 
         val consumerSettings = consumerDefaults.withGroupId(group)
 
-        val control = Transactional
-          .partitionedSource(consumerSettings, TopicSubscription(Set(sourceTopic), None))
-          .mapAsyncUnordered(8) {
-            case (tp, streamCompletePromise, source) =>
-              source
-                .filterNot(_.record.value() == InitialMsg)
-                .map { msg =>
-                  ProducerMessage.single(new ProducerRecord[String, String](sinkTopic, msg.record.value),
-                                         msg.partitionOffset)
-                }
-                .runWith(Transactional.sink(producerDefaults, group + "-" + tp, streamCompletePromise))
-          }
-          .toMat(Sink.ignore)(Keep.left)
-          .run()
+        def runTransactional =
+          Transactional
+            .partitionedSource(consumerSettings, TopicSubscription(Set(sourceTopic), None))
+            .mapAsyncUnordered(maxPartitions) {
+              case (tp, streamCompletePromise, source) =>
+                source
+                  .filterNot(_.record.value() == InitialMsg)
+                  .map { msg =>
+                    ProducerMessage.single(new ProducerRecord[String, String](sinkTopic, msg.record.value),
+                      msg.partitionOffset)
+                  }
+                  .runWith(Transactional.sink(producerDefaults, group + "-" + tp, streamCompletePromise))
+            }
+            .toMat(Sink.ignore)(Keep.left)
+            .run()
+
+        val control = runTransactional
+
+        val control2 = runTransactional
+
+        Await.result(produce(sourceTopic, 101 to 200), remainingOrDefault)
 
         val probeConsumerGroup = createGroupId(2)
         val probeConsumerSettings = consumerDefaults
@@ -113,11 +121,12 @@ class TransactionsSpec extends SpecBase(kafkaPort = KafkaPorts.TransactionsSpec)
           .runWith(TestSink.probe)
 
         probeConsumer
-          .request(100)
-          .expectNextN((1 to 100).map(_.toString))
+          .request(200)
+          .expectNextN((1 to 200).map(_.toString))
 
         probeConsumer.cancel()
         Await.result(control.shutdown(), remainingOrDefault)
+        Await.result(control2.shutdown(), remainingOrDefault)
       }
     }
 
