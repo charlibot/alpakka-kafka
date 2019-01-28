@@ -102,7 +102,7 @@ private abstract class SubSourceLogic[K, V, Msg](
               val futures = revokedTps
                 .flatMap(subSources.get)
                 .map { case (control, streamFuture) => control.shutdown().flatMap(_ => streamFuture) }
-              Await.result(Future.sequence(futures), settings.transactionalStreamStopTimeout)
+              Await.result(Future.sequence(futures), settings.eosStreamStopTimeout)
               log.debug(s"Finished shutting down subsources for: $revokedTps")
             }
             partitionRevokedCB.invoke(revokedTps)
