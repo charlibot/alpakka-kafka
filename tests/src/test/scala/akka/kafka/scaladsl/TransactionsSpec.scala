@@ -96,7 +96,7 @@ class TransactionsSpec extends SpecBase(kafkaPort = KafkaPorts.TransactionsSpec)
                   .filterNot(_.record.value() == InitialMsg)
                   .map { msg =>
                     ProducerMessage.single(new ProducerRecord[String, String](sinkTopic, msg.record.value),
-                      msg.partitionOffset)
+                                           msg.partitionOffset)
                   }
                   .runWith(Transactional.sink(producerDefaults, group + "-" + tp, streamCompletePromise))
             }

@@ -505,6 +505,79 @@ class IntegrationSpec extends SpecBase(kafkaPort = KafkaPorts.IntegrationSpec) w
       }
     }
 
+    "partitioned transactional flow rebalances safely" in assertAllStagesStopped {
+      val partitions = 4
+      val totalMessages = 200L
+
+      val topic = createTopic(1, partitions)
+      val outTopic = createTopic(2, partitions)
+      val group = createGroupId(1)
+      val sourceSettings = consumerDefaults
+        .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
+        .withGroupId(group)
+
+      val topicSubscription = Subscriptions.topics(topic)
+
+      def createAndRunTransactionalFlow(subscription: AutoSubscription) =
+        Transactional
+          .partitionedSource(sourceSettings, subscription)
+          .map {
+            case (tp, streamCompletePromise, source) =>
+              source
+                .map(
+                  msg =>
+                    ProducerMessage.single(new ProducerRecord[String, String](outTopic,
+                                                                              msg.record.partition(),
+                                                                              msg.record.key(),
+                                                                              msg.record.value() + "_out"),
+                                           msg.partitionOffset)
+                )
+                .to(Transactional.sink(producerDefaults, s"$group-$tp", streamCompletePromise))
+                .run()
+          }
+          .toMat(Sink.ignore)(Keep.both)
+          .mapMaterializedValue(DrainingControl.apply)
+          .run()
+
+      def createAndRunProducer(elements: immutable.Iterable[Long]) =
+        Source(elements)
+          .map(n => new ProducerRecord(topic, (n % partitions).toInt, DefaultKey, n.toString))
+          .runWith(Producer.plainSink(producerDefaults, testProducer))
+
+      val control = createAndRunTransactionalFlow(topicSubscription)
+
+      // waits until all partitions are assigned to the single consumer
+      waitUntilConsumerSummary(group, timeout = 5.seconds) {
+        case singleConsumer :: Nil => singleConsumer.assignment.topicPartitions.size == partitions
+      }
+
+      createAndRunProducer(0L until totalMessages / 2).futureValue
+
+      // create another consumer with the same groupId to trigger re-balancing
+      val control2 = createAndRunTransactionalFlow(topicSubscription)
+
+      // waits until partitions are assigned across both consumers
+      waitUntilConsumerSummary(group, timeout = 60.seconds) {
+        case consumer1 :: consumer2 :: Nil =>
+          val half = partitions / 2
+          consumer1.assignment.topicPartitions.size == half && consumer2.assignment.topicPartitions.size == half
+      }
+
+      createAndRunProducer(totalMessages / 2 until totalMessages).futureValue
+
+      val checkingGroup = createGroupId(2)
+      val streamMessages = Consumer
+        .plainSource[String, String](consumerDefaults.withGroupId(checkingGroup), Subscriptions.topics(outTopic))
+        .scan(0L)((c, _) => c + 1)
+        .toMat(Sink.last)(Keep.both)
+        .mapMaterializedValue(DrainingControl.apply)
+        .run()
+
+      val done = control.drainAndShutdown().futureValue
+      val done2 = control2.drainAndShutdown().futureValue
+      streamMessages.drainAndShutdown().futureValue shouldBe totalMessages
+    }
+
   }
 
   "Consumer control" must {
