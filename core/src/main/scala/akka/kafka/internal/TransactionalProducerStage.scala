@@ -28,15 +28,17 @@ import scala.collection.JavaConverters._
 private[kafka] final class TransactionalProducerStage[K, V, P](
     val closeTimeout: FiniteDuration,
     val closeProducerOnStop: Boolean,
-    val producerProvider: () => Producer[K, V],
+    val producerProvider: String => Producer[K, V],
+    transactionalId: Option[String],
     commitInterval: FiniteDuration,
     streamCompletePromise: Promise[Done]
 ) extends GraphStage[FlowShape[Envelope[K, V, P], Future[Results[K, V, P]]]]
-    with ProducerStage[K, V, P, Envelope[K, V, P], Results[K, V, P]] {
+    with ProducerStage[K, V, P, Envelope[K, V, P], Results[K, V, P], String] {
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
     new TransactionalProducerStageLogic(this,
-                                        producerProvider(),
+                                        producerProvider,
+                                        transactionalId,
                                         inheritedAttributes,
                                         commitInterval,
                                         streamCompletePromise)
@@ -84,16 +86,20 @@ private object TransactionalProducerStage {
  * Transaction (Exactly-Once) Producer State Logic
  */
 private final class TransactionalProducerStageLogic[K, V, P](stage: TransactionalProducerStage[K, V, P],
-                                                             producer: Producer[K, V],
+                                                             producerProvider: String => Producer[K, V],
+                                                             transactionalId: Option[String],
                                                              inheritedAttributes: Attributes,
                                                              commitInterval: FiniteDuration,
                                                              streamCompletePromise: Promise[Done])
-    extends DefaultProducerStageLogic[K, V, P, Envelope[K, V, P], Results[K, V, P]](stage,
-                                                                                    producer,
-                                                                                    inheritedAttributes)
+    extends DefaultProducerStageLogic[K, V, P, Envelope[K, V, P], Results[K, V, P], String](stage,
+                                                                                            producerProvider,
+                                                                                            inheritedAttributes)
     with StageLogging
     with MessageCallback[K, V, P]
     with ProducerCompletionState {
+
+  override protected var producer: Producer[K, V] = _
+  private var initiated: Boolean = _
 
   import TransactionalProducerStage._
 
@@ -103,8 +109,13 @@ private final class TransactionalProducerStageLogic[K, V, P](stage: Transactiona
   private var batchOffsets = TransactionBatch.empty
 
   override def preStart(): Unit = {
-    initTransactions()
-    beginTransaction()
+    transactionalId.fold {
+      initiated = false
+    } { txid =>
+      producer = producerProvider(txid)
+      initTransactions()
+      beginTransaction()
+    }
     resumeDemand(tryToPull = false)
     scheduleOnce(commitSchedulerKey, commitInterval)
   }
@@ -144,6 +155,21 @@ private final class TransactionalProducerStageLogic[K, V, P](stage: Transactiona
       case _ =>
         scheduleOnce(commitSchedulerKey, commitInterval)
     }
+  }
+
+  override def produce(in: Envelope[K, V, P]): Unit = {
+    if (!initiated) {
+      in.passThrough match {
+        case ConsumerMessage.PartitionOffset(gtp, _) =>
+          producer = producerProvider(gtp.groupId + "-" + gtp.topic + "-" + gtp.partition)
+          initTransactions()
+          beginTransaction()
+        case _ =>
+          failStage(new IllegalStateException("Transactional producer passthrough does not contain the partition info"))
+      }
+      initiated = true
+    }
+    super.produce(in)
   }
 
   override val onMessageAckCb: AsyncCallback[Envelope[K, V, P]] =

@@ -29,12 +29,14 @@ import scala.util.{Failure, Success, Try}
 private[kafka] class DefaultProducerStage[K, V, P, IN <: Envelope[K, V, P], OUT <: Results[K, V, P]](
     val closeTimeout: FiniteDuration,
     val closeProducerOnStop: Boolean,
-    val producerProvider: () => Producer[K, V]
+    val producerProvider: Unit => Producer[K, V]
 ) extends GraphStage[FlowShape[IN, Future[OUT]]]
-    with ProducerStage[K, V, P, IN, OUT] {
+    with ProducerStage[K, V, P, IN, OUT, Unit] {
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
-    new DefaultProducerStageLogic(this, producerProvider(), inheritedAttributes)
+    new DefaultProducerStageLogic(this, producerProvider, inheritedAttributes) {
+      override protected var producer: Producer[K, V] = producerProvider(())
+    }
 }
 
 /**
@@ -42,15 +44,16 @@ private[kafka] class DefaultProducerStage[K, V, P, IN <: Envelope[K, V, P], OUT 
  *
  * Used by [[DefaultProducerStage]], extended by [[TransactionalProducerStageLogic]].
  */
-private class DefaultProducerStageLogic[K, V, P, IN <: Envelope[K, V, P], OUT <: Results[K, V, P]](
-    stage: ProducerStage[K, V, P, IN, OUT],
-    producer: Producer[K, V],
+private abstract class DefaultProducerStageLogic[K, V, P, IN <: Envelope[K, V, P], OUT <: Results[K, V, P], S](
+    stage: ProducerStage[K, V, P, IN, OUT, S],
+    producerProvider: S => Producer[K, V],
     inheritedAttributes: Attributes
 ) extends TimerGraphStageLogic(stage.shape)
     with StageLogging
     with MessageCallback[K, V, P]
     with ProducerCompletionState {
 
+  protected var producer: Producer[K, V]
   private lazy val decider: Decider =
     inheritedAttributes.get[SupervisionStrategy].map(_.decider).getOrElse(Supervision.stoppingDecider)
   protected val awaitingConfirmation = new AtomicInteger(0)
