@@ -566,15 +566,29 @@ class IntegrationSpec extends SpecBase(kafkaPort = KafkaPorts.IntegrationSpec) w
       createAndRunProducer(totalMessages / 2 until totalMessages).futureValue
 
       val checkingGroup = createGroupId(2)
+
+      val (counterQueue, counterCompletion) = Source
+        .queue[String](8, OverflowStrategy.fail)
+        .scan(0L)((c, _) => c + 1)
+        .takeWhile(_ < totalMessages, inclusive = true)
+        .toMat(Sink.last)(Keep.both)
+        .run()
+
       val streamMessages = Consumer
-        .plainSource[String, String](consumerDefaults.withGroupId(checkingGroup), Subscriptions.topics(outTopic))
+        .plainSource[String, String](consumerDefaults
+                                       .withGroupId(checkingGroup)
+                                       .withProperty(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed"),
+                                     Subscriptions.topics(outTopic))
+        .mapAsync(1)(el => counterQueue.offer(el.value()).map(_ => el))
         .scan(0L)((c, _) => c + 1)
         .toMat(Sink.last)(Keep.both)
         .mapMaterializedValue(DrainingControl.apply)
         .run()
 
-      val done = control.drainAndShutdown().futureValue
-      val done2 = control2.drainAndShutdown().futureValue
+      counterCompletion.futureValue shouldBe totalMessages
+
+      control.drainAndShutdown().futureValue
+      control2.drainAndShutdown().futureValue
       streamMessages.drainAndShutdown().futureValue shouldBe totalMessages
     }
 

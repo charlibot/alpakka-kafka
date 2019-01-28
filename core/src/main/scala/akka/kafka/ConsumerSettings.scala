@@ -341,7 +341,7 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
    * on every rebalance when revoking the partitions.
    */
   def withEosStreamStopTimeout(eosStreamStopTimeout: FiniteDuration): ConsumerSettings[K, V] =
-    copy(stopTimeout = stopTimeout)
+    copy(eosStreamStopTimeout = eosStreamStopTimeout)
 
   /**
    * Java API:
