@@ -551,13 +551,13 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
     s"pollInterval=${pollInterval.toCoarsest}," +
     s"pollTimeout=${pollTimeout.toCoarsest}," +
     s"stopTimeout=${stopTimeout.toCoarsest}," +
-    s"eosStreamStopTimeout=${eosStreamStopTimeout.toCoarsest}"
-  s"closeTimeout=${closeTimeout.toCoarsest}," +
-  s"commitTimeout=${commitTimeout.toCoarsest}," +
-  s"commitRefreshInterval=${commitRefreshInterval.toCoarsest}," +
-  s"dispatcher=$dispatcher," +
-  s"commitTimeWarning=${commitTimeWarning.toCoarsest}," +
-  s"waitClosePartition=${waitClosePartition.toCoarsest}," +
-  s"metadataRequestTimeout=${metadataRequestTimeout.toCoarsest}" +
+    s"eosStreamStopTimeout=${eosStreamStopTimeout.toCoarsest}," +
+    s"closeTimeout=${closeTimeout.toCoarsest}," +
+    s"commitTimeout=${commitTimeout.toCoarsest}," +
+    s"commitRefreshInterval=${commitRefreshInterval.toCoarsest}," +
+    s"dispatcher=$dispatcher," +
+    s"commitTimeWarning=${commitTimeWarning.toCoarsest}," +
+    s"waitClosePartition=${waitClosePartition.toCoarsest}," +
+    s"metadataRequestTimeout=${metadataRequestTimeout.toCoarsest}" +
   ")"
 }

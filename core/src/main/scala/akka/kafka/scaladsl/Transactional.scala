@@ -37,7 +37,7 @@ object Transactional {
    * a promise that should be passed to the [[Transactional.sink]] or [[Transactional.flow]] and a corresponding
    * source of `TransactionalMessage`s. Each source is setup for for Exactly Only Once (EoS) kafka message semantics.
    * To enable EoS it's necessary to use the [[Transactional.sink]] or [[Transactional.flow]] (for passthrough).
-   * When a topic-partition is revoked, the corresponding source completes.
+   * When Kafka rebalances partitions, all sources complete before the remaining sources are issued again.
    *
    * By generating the `transactionalId` from the [[TopicPartition]], multiple instances of your application can run
    * without having to manually assign partitions to each instance.

@@ -98,12 +98,14 @@ private abstract class SubSourceLogic[K, V, Msg](
           if (revokedTps.nonEmpty) {
             if (waitForStreamCompletion) {
               implicit val ec: ExecutionContext = materializer.executionContext
-              log.debug(s"Shutting down subsources for: $revokedTps")
-              val futures = revokedTps
+              if (log.isDebugEnabled) {
+                log.debug(s"Shutting down subsources for: $revokedTps")
+              }
+              val completions = revokedTps
                 .flatMap(subSources.get)
-                .map { case (control, streamFuture) => control.shutdown().flatMap(_ => streamFuture) }
-              Await.result(Future.sequence(futures), settings.eosStreamStopTimeout)
-              log.debug(s"Finished shutting down subsources for: $revokedTps")
+                .map { case (control, subSourceCompletion) => control.shutdown().flatMap(_ => subSourceCompletion) }
+              Await.result(Future.sequence(completions), settings.eosStreamStopTimeout)
+              log.debug(s"Finished shutting down subsources")
             }
             partitionRevokedCB.invoke(revokedTps)
           }
@@ -187,7 +189,9 @@ private abstract class SubSourceLogic[K, V, Msg](
       onRevoke(partitionsToRevoke)
       pendingPartitions --= partitionsToRevoke
       partitionsInStartup --= partitionsToRevoke
-      partitionsToRevoke.flatMap(subSources.get).foreach(_._1.shutdown())
+      partitionsToRevoke.flatMap(subSources.get).foreach {
+        case (control, _) => control.shutdown()
+      }
       subSources --= partitionsToRevoke
       partitionsToRevoke = Set.empty
   }
