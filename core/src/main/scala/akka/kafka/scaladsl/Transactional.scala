@@ -81,6 +81,14 @@ object Transactional {
       settings: ProducerSettings[K, V],
       streamCompletePromise: Promise[Done] = Promise()
   ): Flow[Envelope[K, V, ConsumerMessage.PartitionOffset], Results[K, V, ConsumerMessage.PartitionOffset], NotUsed] = {
+    flowCommon(settings, None, streamCompletePromise)
+  }
+
+  private def flowCommon[K, V](
+    settings: ProducerSettings[K, V],
+    transactionalId: Option[String],
+    streamCompletePromise: Promise[Done] = Promise()
+  ): Flow[Envelope[K, V, ConsumerMessage.PartitionOffset], Results[K, V, ConsumerMessage.PartitionOffset], NotUsed] = {
     val txSettingsToProducer = (txid: String) => {
       settings
         .withProperties(
@@ -97,7 +105,7 @@ object Transactional {
           settings.closeTimeout,
           closeProducerOnStop = true,
           txSettingsToProducer,
-          None,
+          transactionalId,
           settings.eosCommitInterval,
           streamCompletePromise
         )
@@ -131,31 +139,7 @@ object Transactional {
       streamCompletePromise: Promise[Done]
   ): Flow[Envelope[K, V, ConsumerMessage.PartitionOffset], Results[K, V, ConsumerMessage.PartitionOffset], NotUsed] = {
     require(transactionalId != null && transactionalId.length > 0, "You must define a Transactional id.")
-
-    val txSettingsToProducer = (txid: String) => {
-      settings
-        .withProperties(
-          ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG -> true.toString,
-          ProducerConfig.TRANSACTIONAL_ID_CONFIG -> txid,
-          ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION -> 1.toString
-        )
-        .createKafkaProducer()
-    }
-
-    val flow = Flow
-      .fromGraph(
-        new TransactionalProducerStage[K, V, ConsumerMessage.PartitionOffset](
-          settings.closeTimeout,
-          closeProducerOnStop = true,
-          txSettingsToProducer,
-          Some(transactionalId),
-          settings.eosCommitInterval,
-          streamCompletePromise
-        )
-      )
-      .mapAsync(settings.parallelism)(identity)
-
-    flowWithDispatcher(settings, flow)
+    flowCommon(settings, Some(transactionalId), streamCompletePromise)
   }
 
   private def flowWithDispatcher[PassThrough, V, K](
