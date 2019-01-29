@@ -77,6 +77,7 @@ private[kafka] final class TransactionalSubSource[K, V](consumerSettings: Consum
                                                          subscription,
                                                          waitForStreamCompletion = true)
     with TransactionalMessageBuilder[K, V] {
+      override val fromPartitionedSource: Boolean = true
       override def groupId: String = txConsumerSettings.properties(ConsumerConfig.GROUP_ID_CONFIG)
     }
 }

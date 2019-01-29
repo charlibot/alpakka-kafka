@@ -78,7 +78,7 @@ object ConsumerMessage {
   /**
    * Offset position for a groupId, topic, partition.
    */
-  final case class PartitionOffset(key: GroupTopicPartition, offset: Long) {
+  final case class PartitionOffset(key: GroupTopicPartition, offset: Long, fromPartitionedSource: Boolean = false) {
     def withMetadata(metadata: String) =
       PartitionOffsetMetadata(key, offset, metadata)
   }

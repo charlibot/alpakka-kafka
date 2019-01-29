@@ -71,50 +71,6 @@ object Transactional {
   ): Sink[Envelope[K, V, ConsumerMessage.PartitionOffset], Future[Done]] =
     flow(settings, transactionalId, streamCompletePromise).toMat(Sink.ignore)(Keep.right)
 
-  def sinkFromPartitioned[K, V](
-      settings: ProducerSettings[K, V],
-      streamCompletePromise: Promise[Done] = Promise()
-  ): Sink[Envelope[K, V, ConsumerMessage.PartitionOffset], Future[Done]] =
-    flowFromPartitioned(settings, streamCompletePromise).toMat(Sink.ignore)(Keep.right)
-
-  def flowFromPartitioned[K, V](
-      settings: ProducerSettings[K, V],
-      streamCompletePromise: Promise[Done] = Promise()
-  ): Flow[Envelope[K, V, ConsumerMessage.PartitionOffset], Results[K, V, ConsumerMessage.PartitionOffset], NotUsed] = {
-    flowCommon(settings, None, streamCompletePromise)
-  }
-
-  private def flowCommon[K, V](
-    settings: ProducerSettings[K, V],
-    transactionalId: Option[String],
-    streamCompletePromise: Promise[Done] = Promise()
-  ): Flow[Envelope[K, V, ConsumerMessage.PartitionOffset], Results[K, V, ConsumerMessage.PartitionOffset], NotUsed] = {
-    val txSettingsToProducer = (txid: String) => {
-      settings
-        .withProperties(
-          ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG -> true.toString,
-          ProducerConfig.TRANSACTIONAL_ID_CONFIG -> txid,
-          ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION -> 1.toString
-        )
-        .createKafkaProducer()
-    }
-
-    val flow = Flow
-      .fromGraph(
-        new TransactionalProducerStage[K, V, ConsumerMessage.PartitionOffset](
-          settings.closeTimeout,
-          closeProducerOnStop = true,
-          txSettingsToProducer,
-          transactionalId,
-          settings.eosCommitInterval,
-          streamCompletePromise
-        )
-      )
-      .mapAsync(settings.parallelism)(identity)
-
-    flowWithDispatcher(settings, flow)
-  }
-
   /**
    * Publish records to Kafka topics and then continue the flow.  The flow should only used with a [[Transactional.source]] that
    * emits a [[ConsumerMessage.TransactionalMessage]].  The flow requires a unique `transactional.id` across all app
@@ -139,7 +95,31 @@ object Transactional {
       streamCompletePromise: Promise[Done]
   ): Flow[Envelope[K, V, ConsumerMessage.PartitionOffset], Results[K, V, ConsumerMessage.PartitionOffset], NotUsed] = {
     require(transactionalId != null && transactionalId.length > 0, "You must define a Transactional id.")
-    flowCommon(settings, Some(transactionalId), streamCompletePromise)
+
+    val txSettingsToProducer = (txid: String) => {
+      settings
+        .withProperties(
+          ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG -> true.toString,
+          ProducerConfig.TRANSACTIONAL_ID_CONFIG -> txid,
+          ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION -> 1.toString
+        )
+        .createKafkaProducer()
+    }
+
+    val flow = Flow
+      .fromGraph(
+        new TransactionalProducerStage[K, V, ConsumerMessage.PartitionOffset](
+          settings.closeTimeout,
+          closeProducerOnStop = true,
+          txSettingsToProducer,
+          transactionalId,
+          settings.eosCommitInterval,
+          streamCompletePromise
+        )
+      )
+      .mapAsync(settings.parallelism)(identity)
+
+    flowWithDispatcher(settings, flow)
   }
 
   private def flowWithDispatcher[PassThrough, V, K](

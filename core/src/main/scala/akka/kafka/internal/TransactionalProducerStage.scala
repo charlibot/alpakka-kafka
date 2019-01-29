@@ -29,7 +29,7 @@ private[kafka] final class TransactionalProducerStage[K, V, P](
     val closeTimeout: FiniteDuration,
     val closeProducerOnStop: Boolean,
     val producerProvider: String => Producer[K, V],
-    transactionalId: Option[String],
+    transactionalId: String,
     commitInterval: FiniteDuration,
     streamCompletePromise: Promise[Done]
 ) extends GraphStage[FlowShape[Envelope[K, V, P], Future[Results[K, V, P]]]]
@@ -87,7 +87,7 @@ private object TransactionalProducerStage {
  */
 private final class TransactionalProducerStageLogic[K, V, P](stage: TransactionalProducerStage[K, V, P],
                                                              producerProvider: String => Producer[K, V],
-                                                             transactionalId: Option[String],
+                                                             transactionalId: String,
                                                              inheritedAttributes: Attributes,
                                                              commitInterval: FiniteDuration,
                                                              streamCompletePromise: Promise[Done])
@@ -109,13 +109,7 @@ private final class TransactionalProducerStageLogic[K, V, P](stage: Transactiona
   private var batchOffsets = TransactionBatch.empty
 
   override def preStart(): Unit = {
-    transactionalId.fold {
-      initiated = false
-    } { txid =>
-      producer = producerProvider(txid)
-      initTransactions()
-      beginTransaction()
-    }
+    initiated = false
     resumeDemand(tryToPull = false)
     scheduleOnce(commitSchedulerKey, commitInterval)
   }
@@ -160,13 +154,15 @@ private final class TransactionalProducerStageLogic[K, V, P](stage: Transactiona
   override def produce(in: Envelope[K, V, P]): Unit = {
     if (!initiated) {
       in.passThrough match {
-        case ConsumerMessage.PartitionOffset(gtp, _) =>
-          producer = producerProvider(gtp.groupId + "-" + gtp.topic + "-" + gtp.partition)
-          initTransactions()
-          beginTransaction()
+        case ConsumerMessage.PartitionOffset(gtp, _, true) =>
+          producer = producerProvider(s"$transactionalId-${gtp.groupId}-${gtp.topic}-${gtp.partition}")
+        case ConsumerMessage.PartitionOffset(gtp, _, false) =>
+          producer = producerProvider(transactionalId)
         case _ =>
           failStage(new IllegalStateException("Transactional producer passthrough does not contain the partition info"))
       }
+      initTransactions()
+      beginTransaction()
       initiated = true
     }
     super.produce(in)

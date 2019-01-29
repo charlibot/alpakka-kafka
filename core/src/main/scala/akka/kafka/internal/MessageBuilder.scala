@@ -41,6 +41,7 @@ private[kafka] trait PlainMessageBuilder[K, V] extends MessageBuilder[K, V, Cons
 @InternalApi
 private[kafka] trait TransactionalMessageBuilder[K, V] extends MessageBuilder[K, V, TransactionalMessage[K, V]] {
   def groupId: String
+  val fromPartitionedSource: Boolean = false
 
   override def createMessage(rec: ConsumerRecord[K, V]) = {
     val offset = ConsumerMessage.PartitionOffset(
@@ -49,7 +50,8 @@ private[kafka] trait TransactionalMessageBuilder[K, V] extends MessageBuilder[K,
         topic = rec.topic,
         partition = rec.partition
       ),
-      offset = rec.offset
+      offset = rec.offset,
+      fromPartitionedSource
     )
     ConsumerMessage.TransactionalMessage(rec, offset)
   }
