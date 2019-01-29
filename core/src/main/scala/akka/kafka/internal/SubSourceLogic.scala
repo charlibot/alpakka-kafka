@@ -128,7 +128,7 @@ private abstract class SubSourceLogic[K, V, Msg](
   }
 
   val partitionAssignedCB = getAsyncCallback[Set[TopicPartition]] { assigned =>
-    val formerlyUnknown = assigned -- partitionsToRevoke
+    val formerlyUnknown = if (waitForStreamCompletion) assigned else assigned -- partitionsToRevoke
 
     if (log.isDebugEnabled && formerlyUnknown.nonEmpty) {
       log.debug("#{} Assigning new partitions: {}", actorNumber, formerlyUnknown.mkString(", "))
