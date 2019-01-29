@@ -513,7 +513,6 @@ class IntegrationSpec extends SpecBase(kafkaPort = KafkaPorts.IntegrationSpec) w
       val outTopic = createTopic(2, partitions)
       val group = createGroupId(1)
       val sourceSettings = consumerDefaults
-        .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
         .withGroupId(group)
 
       val topicSubscription = Subscriptions.topics(topic)
@@ -529,7 +528,7 @@ class IntegrationSpec extends SpecBase(kafkaPort = KafkaPorts.IntegrationSpec) w
                     ProducerMessage.single(new ProducerRecord[String, String](outTopic,
                                                                               msg.record.partition(),
                                                                               msg.record.key(),
-                                                                              msg.record.value() + "_out"),
+                                                                              msg.record.value() + "-out"),
                                            msg.partitionOffset)
                 )
                 .to(Transactional.sink(producerDefaults, s"$group-$tp", streamCompletePromise))
