@@ -54,8 +54,20 @@ object Transactional {
    */
   def sink[K, V](
       settings: ProducerSettings[K, V],
+      transactionalId: String
+  ): Sink[Envelope[K, V, ConsumerMessage.PartitionOffset], Future[Done]] =
+    sink(settings, transactionalId, Promise())
+
+  /**
+   * Sink that is aware of the [[ConsumerMessage.TransactionalMessage.partitionOffset]] from a [[Transactional.source]].  It will
+   * initialize, begin, produce, and commit the consumer offset as part of a transaction.
+   *
+   * This sink requires a [[Promise]] that should originate from the [[partitionedSource]] in order to safely rebalance.
+   */
+  def sink[K, V](
+      settings: ProducerSettings[K, V],
       transactionalId: String,
-      streamCompletePromise: Promise[Done] = Promise()
+      streamCompletePromise: Promise[Done]
   ): Sink[Envelope[K, V, ConsumerMessage.PartitionOffset], Future[Done]] =
     flow(settings, transactionalId, streamCompletePromise).toMat(Sink.ignore)(Keep.right)
 
@@ -66,8 +78,21 @@ object Transactional {
    */
   def flow[K, V](
       settings: ProducerSettings[K, V],
+      transactionalId: String
+  ): Flow[Envelope[K, V, ConsumerMessage.PartitionOffset], Results[K, V, ConsumerMessage.PartitionOffset], NotUsed] =
+    flow(settings, transactionalId, Promise())
+
+  /**
+   * Publish records to Kafka topics and then continue the flow.  The flow should only used with a [[Transactional.source]] that
+   * emits a [[ConsumerMessage.TransactionalMessage]].  The flow requires a unique `transactional.id` across all app
+   * instances.  The flow will override producer properties to enable Kafka exactly once transactional support.
+   *
+   * This flow requires a [[Promise]] that should originate from the [[partitionedSource]] in order to safely rebalance.
+   */
+  def flow[K, V](
+      settings: ProducerSettings[K, V],
       transactionalId: String,
-      streamCompletePromise: Promise[Done] = Promise()
+      streamCompletePromise: Promise[Done]
   ): Flow[Envelope[K, V, ConsumerMessage.PartitionOffset], Results[K, V, ConsumerMessage.PartitionOffset], NotUsed] = {
     require(transactionalId != null && transactionalId.length > 0, "You must define a Transactional id.")
 

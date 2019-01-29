@@ -75,6 +75,8 @@ object Transactional {
   /**
    * Sink that is aware of the [[ConsumerMessage.TransactionalMessage.partitionOffset]] from a [[Transactional.source]].  It will
    * initialize, begin, produce, and commit the consumer offset as part of a transaction.
+   *
+   * This sink requires a [[Promise]] that should originate from the [[partitionedSource]] in order to safely rebalance.
    */
   def sink[K, V, IN <: Envelope[K, V, ConsumerMessage.PartitionOffset]](
       settings: ProducerSettings[K, V],
@@ -101,6 +103,8 @@ object Transactional {
    * Publish records to Kafka topics and then continue the flow.  The flow can only used with a [[Transactional.source]] that
    * emits a [[ConsumerMessage.TransactionalMessage]].  The flow requires a unique `transactional.id` across all app
    * instances.  The flow will override producer properties to enable Kafka exactly once transactional support.
+   *
+   * This flow requires a [[Promise]] that should originate from the [[partitionedSource]] in order to safely rebalance.
    */
   def flow[K, V, IN <: Envelope[K, V, ConsumerMessage.PartitionOffset]](
       settings: ProducerSettings[K, V],

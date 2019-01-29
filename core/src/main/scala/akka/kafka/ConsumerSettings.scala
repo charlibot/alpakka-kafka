@@ -61,7 +61,6 @@ object ConsumerSettings {
     val pollInterval = config.getDuration("poll-interval").asScala
     val pollTimeout = config.getDuration("poll-timeout").asScala
     val stopTimeout = config.getDuration("stop-timeout").asScala
-    val eosStreamStopTimeout = config.getDuration("eos-stream-stop-timeout").asScala
     val closeTimeout = config.getDuration("close-timeout").asScala
     val commitTimeout = config.getDuration("commit-timeout").asScala
     val commitTimeWarning = config.getDuration("commit-time-warning").asScala
@@ -71,6 +70,7 @@ object ConsumerSettings {
     val positionTimeout = config.getDuration("position-timeout").asScala
     val offsetForTimesTimeout = config.getDuration("offset-for-times-timeout").asScala
     val metadataRequestTimeout = config.getDuration("metadata-request-timeout").asScala
+    val eosStreamStopTimeout = config.getDuration("eos-stream-stop-timeout").asScala
     new ConsumerSettings[K, V](
       properties,
       keyDeserializer,
@@ -78,7 +78,6 @@ object ConsumerSettings {
       pollInterval,
       pollTimeout,
       stopTimeout,
-      eosStreamStopTimeout,
       closeTimeout,
       commitTimeout,
       commitRefreshInterval,
@@ -88,6 +87,7 @@ object ConsumerSettings {
       positionTimeout,
       offsetForTimesTimeout,
       metadataRequestTimeout,
+      eosStreamStopTimeout,
       ConsumerSettings.createKafkaConsumer
     )
   }
@@ -189,7 +189,6 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
     val pollInterval: FiniteDuration,
     val pollTimeout: FiniteDuration,
     val stopTimeout: FiniteDuration,
-    val eosStreamStopTimeout: FiniteDuration,
     val closeTimeout: FiniteDuration,
     val commitTimeout: FiniteDuration,
     val commitRefreshInterval: Duration,
@@ -199,6 +198,7 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
     val positionTimeout: FiniteDuration,
     val offsetForTimesTimeout: FiniteDuration,
     val metadataRequestTimeout: FiniteDuration,
+    val eosStreamStopTimeout: FiniteDuration,
     val consumerFactory: ConsumerSettings[K, V] => Consumer[K, V]
 ) {
 
@@ -209,7 +209,6 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
            pollInterval: FiniteDuration,
            pollTimeout: FiniteDuration,
            stopTimeout: FiniteDuration,
-           eosStreamStopTimeout: FiniteDuration,
            closeTimeout: FiniteDuration,
            commitTimeout: FiniteDuration,
            wakeupTimeout: FiniteDuration,
@@ -225,7 +224,6 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
     pollInterval,
     pollTimeout,
     stopTimeout,
-    eosStreamStopTimeout,
     closeTimeout,
     commitTimeout,
     commitRefreshInterval,
@@ -235,6 +233,7 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
     positionTimeout = 5.seconds,
     offsetForTimesTimeout = 5.seconds,
     metadataRequestTimeout = 5.seconds,
+    eosStreamStopTimeout = 40.seconds,
     consumerFactory = ConsumerSettings.createKafkaConsumer
   )
 
@@ -525,7 +524,6 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
       pollInterval,
       pollTimeout,
       stopTimeout,
-      eosStreamStopTimeout,
       closeTimeout,
       commitTimeout,
       commitRefreshInterval,
@@ -535,6 +533,7 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
       positionTimeout,
       offsetForTimesTimeout,
       metadataRequestTimeout,
+      eosStreamStopTimeout,
       consumerFactory
     )
 
@@ -551,13 +550,13 @@ class ConsumerSettings[K, V] @InternalApi private[kafka] (
     s"pollInterval=${pollInterval.toCoarsest}," +
     s"pollTimeout=${pollTimeout.toCoarsest}," +
     s"stopTimeout=${stopTimeout.toCoarsest}," +
-    s"eosStreamStopTimeout=${eosStreamStopTimeout.toCoarsest}," +
     s"closeTimeout=${closeTimeout.toCoarsest}," +
     s"commitTimeout=${commitTimeout.toCoarsest}," +
     s"commitRefreshInterval=${commitRefreshInterval.toCoarsest}," +
     s"dispatcher=$dispatcher," +
     s"commitTimeWarning=${commitTimeWarning.toCoarsest}," +
     s"waitClosePartition=${waitClosePartition.toCoarsest}," +
-    s"metadataRequestTimeout=${metadataRequestTimeout.toCoarsest}" +
+    s"metadataRequestTimeout=${metadataRequestTimeout.toCoarsest}," +
+    s"eosStreamStopTimeout=${eosStreamStopTimeout.toCoarsest}" +
     ")"
 }
