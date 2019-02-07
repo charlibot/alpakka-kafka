@@ -39,12 +39,11 @@ private abstract class SubSourceLogic[K, V, Msg](
     subscription: AutoSubscription,
     getOffsetsOnAssign: Option[Set[TopicPartition] => Future[Map[TopicPartition, Long]]] = None,
     onRevoke: Set[TopicPartition] => Unit = _ => ()
-) extends TimerGraphStageLogic(shape)
+) extends GraphStageLogic(shape)
     with PromiseControl
     with MetricsControl
     with MessageBuilder[K, V, Msg]
     with StageLogging {
-  import SubSourceLogic._
 
   val consumerPromise = Promise[ActorRef]
   final val actorNumber = KafkaConsumerActor.Internal.nextNumber()
@@ -87,7 +86,7 @@ private abstract class SubSourceLogic[K, V, Msg](
             _.tell(TopicPartitionsAssigned(subscription, assignedTps), sourceActor.ref)
           }
           if (assignedTps.nonEmpty) {
-            partitionAssignedCB.invoke(assignedTps)
+            partitionAssignedCB(assignedTps)
           }
         },
         revokedTps => {
@@ -95,7 +94,7 @@ private abstract class SubSourceLogic[K, V, Msg](
             _.tell(TopicPartitionsRevoked(subscription, revokedTps), sourceActor.ref)
           }
           if (revokedTps.nonEmpty) {
-            partitionRevokedCB.invoke(revokedTps)
+            partitionRevokedCB(revokedTps)
           }
         }
       )
@@ -115,7 +114,7 @@ private abstract class SubSourceLogic[K, V, Msg](
     failStage(ex)
   }
 
-  val partitionAssignedCB = getAsyncCallback[Set[TopicPartition]] { assigned =>
+  def partitionAssignedCB(assigned: Set[TopicPartition]) {
     val formerlyUnknown = assigned -- partitionsToRevoke
 
     if (log.isDebugEnabled && formerlyUnknown.nonEmpty) {
@@ -144,6 +143,16 @@ private abstract class SubSourceLogic[K, V, Msg](
               seekAndEmitSubSources(formerlyUnknown, offsets)
           }
     }
+
+    if (log.isDebugEnabled) {
+      log.debug("#{} Closing SubSources for revoked partitions: {}", actorNumber, partitionsToRevoke.mkString(", "))
+    }
+    onRevoke(partitionsToRevoke)
+    pendingPartitions --= partitionsToRevoke
+    partitionsInStartup --= partitionsToRevoke
+    partitionsToRevoke.flatMap(subSources.get).foreach(_.shutdown())
+    subSources --= partitionsToRevoke
+    partitionsToRevoke = Set.empty
   }
 
   private def seekAndEmitSubSources(
@@ -164,22 +173,8 @@ private abstract class SubSourceLogic[K, V, Msg](
       }
   }
 
-  val partitionRevokedCB = getAsyncCallback[Set[TopicPartition]] { revoked =>
+  def partitionRevokedCB(revoked: Set[TopicPartition]) {
     partitionsToRevoke ++= revoked
-    scheduleOnce(CloseRevokedPartitions, settings.waitClosePartition)
-  }
-
-  override def onTimer(timerKey: Any): Unit = timerKey match {
-    case CloseRevokedPartitions =>
-      if (log.isDebugEnabled) {
-        log.debug("#{} Closing SubSources for revoked partitions: {}", actorNumber, partitionsToRevoke.mkString(", "))
-      }
-      onRevoke(partitionsToRevoke)
-      pendingPartitions --= partitionsToRevoke
-      partitionsInStartup --= partitionsToRevoke
-      partitionsToRevoke.flatMap(subSources.get).foreach(_.shutdown())
-      subSources --= partitionsToRevoke
-      partitionsToRevoke = Set.empty
   }
 
   val subsourceCancelledCB: AsyncCallback[(TopicPartition, Option[ConsumerRecord[K, V]])] =
@@ -277,11 +272,6 @@ private abstract class SubSourceLogic[K, V, Msg](
     })
   }
 
-}
-
-/** Internal API */
-private object SubSourceLogic {
-  case object CloseRevokedPartitions
 }
 
 /** Internal API */

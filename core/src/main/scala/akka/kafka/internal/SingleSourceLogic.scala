@@ -34,13 +34,13 @@ import scala.concurrent.{Future, Promise}
   final def configureSubscription(): Unit = {
 
     def rebalanceListener(autoSubscription: AutoSubscription): KafkaConsumerActor.ListenerCallbacks = {
-      val partitionAssignedCB = getAsyncCallback[Set[TopicPartition]] { assignedTps =>
+      def partitionAssignedCB(assignedTps: Set[TopicPartition]) {
         tps ++= assignedTps
         log.debug("Assigned partitions: {}. All partitions: {}", assignedTps, tps)
         requestMessages()
       }
 
-      val partitionRevokedCB = getAsyncCallback[Set[TopicPartition]] { revokedTps =>
+      def partitionRevokedCB(revokedTps: Set[TopicPartition]) {
         tps --= revokedTps
         log.debug("Revoked partitions: {}. All partitions: {}", revokedTps, tps)
       }
@@ -51,7 +51,7 @@ import scala.concurrent.{Future, Promise}
             _.tell(TopicPartitionsAssigned(autoSubscription, assignedTps), sourceActor.ref)
           }
           if (assignedTps.nonEmpty) {
-            partitionAssignedCB.invoke(assignedTps)
+            partitionAssignedCB(assignedTps)
           }
         },
         revokedTps => {
@@ -59,7 +59,7 @@ import scala.concurrent.{Future, Promise}
             _.tell(TopicPartitionsRevoked(autoSubscription, revokedTps), sourceActor.ref)
           }
           if (revokedTps.nonEmpty) {
-            partitionRevokedCB.invoke(revokedTps)
+            partitionRevokedCB(revokedTps)
           }
         }
       )
