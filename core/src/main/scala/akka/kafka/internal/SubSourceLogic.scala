@@ -5,7 +5,6 @@
 
 package akka.kafka.internal
 
-import akka.NotUsed
 import akka.actor.Status
 import akka.actor.{ActorRef, ExtendedActorSystem, Terminated}
 import akka.annotation.InternalApi
@@ -24,7 +23,7 @@ import org.apache.kafka.common.TopicPartition
 import scala.annotation.tailrec
 import scala.collection.immutable
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success}
 
 /**
@@ -34,7 +33,7 @@ import scala.util.{Failure, Success}
  */
 @InternalApi
 private abstract class SubSourceLogic[K, V, Msg](
-    val shape: SourceShape[(TopicPartition, Source[Msg, NotUsed])],
+    val shape: SourceShape[(TopicPartition, Source[Msg, Control])],
     settings: ConsumerSettings[K, V],
     subscription: AutoSubscription,
     getOffsetsOnAssign: Option[Set[TopicPartition] => Future[Map[TopicPartition, Long]]] = None,
@@ -83,7 +82,19 @@ private abstract class SubSourceLogic[K, V, Msg](
       KafkaConsumerActor.ListenerCallbacks(
         assignedTps => {
           subscription.rebalanceListener.foreach {
-            _.tell(TopicPartitionsAssigned(subscription, assignedTps), sourceActor.ref)
+            listenerRef =>
+              // TODO: Make a new timeout
+              val listenerCompletion =
+                listenerRef.ask(TopicPartitionsAssigned(subscription, assignedTps))(settings.waitClosePartition,
+                                                                                    sourceActor.ref)
+              val completedListener = Await.ready(listenerCompletion, settings.waitClosePartition).value.get
+              completedListener match {
+                case Success(_) =>
+                case Failure(_) =>
+                  log.warning(
+                    s"Listener did not respond to TopicPartitionsAssigned within ${settings.waitClosePartition}"
+                  )
+              }
           }
           if (assignedTps.nonEmpty) {
             partitionAssignedCB(assignedTps)
@@ -91,7 +102,19 @@ private abstract class SubSourceLogic[K, V, Msg](
         },
         revokedTps => {
           subscription.rebalanceListener.foreach {
-            _.tell(TopicPartitionsRevoked(subscription, revokedTps), sourceActor.ref)
+            listenerRef =>
+              // TODO: Make a new timeout
+              val listenerCompletion =
+                listenerRef.ask(TopicPartitionsRevoked(subscription, revokedTps))(settings.waitClosePartition,
+                                                                                  sourceActor.ref)
+              val completedListener = Await.ready(listenerCompletion, settings.waitClosePartition).value.get
+              completedListener match {
+                case Success(_) =>
+                case Failure(_) =>
+                  log.warning(
+                    s"Listener did not respond to TopicPartitionsRevoked within ${settings.waitClosePartition}"
+                  )
+              }
           }
           if (revokedTps.nonEmpty) {
             partitionRevokedCB(revokedTps)
@@ -114,7 +137,7 @@ private abstract class SubSourceLogic[K, V, Msg](
     failStage(ex)
   }
 
-  def partitionAssignedCB(assigned: Set[TopicPartition]) {
+  def partitionAssignedCB(assigned: Set[TopicPartition]): Unit = {
     val formerlyUnknown = assigned -- partitionsToRevoke
 
     if (log.isDebugEnabled && formerlyUnknown.nonEmpty) {
@@ -173,9 +196,8 @@ private abstract class SubSourceLogic[K, V, Msg](
       }
   }
 
-  def partitionRevokedCB(revoked: Set[TopicPartition]) {
+  def partitionRevokedCB(revoked: Set[TopicPartition]): Unit =
     partitionsToRevoke ++= revoked
-  }
 
   val subsourceCancelledCB: AsyncCallback[(TopicPartition, Option[ConsumerRecord[K, V]])] =
     getAsyncCallback[(TopicPartition, Option[ConsumerRecord[K, V]])] {
@@ -282,11 +304,11 @@ private final class SubSourceStage[K, V, Msg](
     subSourceCancelledCb: AsyncCallback[(TopicPartition, Option[ConsumerRecord[K, V]])],
     messageBuilder: MessageBuilder[K, V, Msg],
     actorNumber: Int
-) extends GraphStage[SourceShape[Msg]] { stage =>
+) extends GraphStageWithMaterializedValue[SourceShape[Msg], Control] { stage =>
   val out = Outlet[Msg]("out")
   val shape = new SourceShape(out)
 
-  override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
+  private def logic(): GraphStageLogic with Control =
     new GraphStageLogic(shape) with PromiseControl with MetricsControl with StageLogging {
       override def executionContext: ExecutionContext = materializer.executionContext
       override def consumerFuture: Future[ActorRef] = Future.successful(consumerActor)
@@ -360,4 +382,9 @@ private final class SubSourceStage[K, V, Msg](
           }
         }
     }
+
+  override def createLogicAndMaterializedValue(inheritedAttributes: Attributes): (GraphStageLogic, Control) = {
+    val result = logic()
+    (result, result)
+  }
 }

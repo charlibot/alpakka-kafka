@@ -7,13 +7,14 @@ package akka.kafka.scaladsl
 
 import akka.kafka.ConsumerMessage.TransactionalMessage
 import akka.kafka.ProducerMessage._
-import akka.kafka.internal.{TransactionalProducerStage, TransactionalSource}
+import akka.kafka.internal.{TransactionalProducerStage, TransactionalSource, TransactionalSubSource}
 import akka.kafka.scaladsl.Consumer.Control
-import akka.kafka.{ConsumerMessage, ConsumerSettings, ProducerSettings, Subscription}
+import akka.kafka._
 import akka.stream.ActorAttributes
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
 import akka.{Done, NotUsed}
 import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.common.TopicPartition
 
 import scala.concurrent.Future
 
@@ -29,6 +30,12 @@ object Transactional {
   def source[K, V](settings: ConsumerSettings[K, V],
                    subscription: Subscription): Source[TransactionalMessage[K, V], Control] =
     Source.fromGraph(new TransactionalSource[K, V](settings, subscription))
+
+  def partitionedSource[K, V](
+      settings: ConsumerSettings[K, V],
+      subscription: AutoSubscription
+  ): Source[(TopicPartition, Source[TransactionalMessage[K, V], Control]), Control] =
+    Source.fromGraph(new TransactionalSubSource[K, V](settings, subscription))
 
   /**
    * Sink that is aware of the [[ConsumerMessage.TransactionalMessage.partitionOffset]] from a [[Transactional.source]].  It will

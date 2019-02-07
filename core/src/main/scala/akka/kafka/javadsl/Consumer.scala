@@ -182,11 +182,14 @@ object Consumer {
   def plainPartitionedSource[K, V](
       settings: ConsumerSettings[K, V],
       subscription: AutoSubscription
-  ): Source[Pair[TopicPartition, Source[ConsumerRecord[K, V], NotUsed]], Control] =
+  ): Source[Pair[TopicPartition, Source[ConsumerRecord[K, V], Control]], Control] =
     scaladsl.Consumer
       .plainPartitionedSource(settings, subscription)
       .map {
-        case (tp, source) => Pair(tp, source.asJava)
+        case (tp, source) =>
+          val sourceWithControl: Source[ConsumerRecord[K, V], Control] =
+            source.mapMaterializedValue(new ConsumerControlAsJava(_)).asJava
+          Pair(tp, sourceWithControl)
       }
       .mapMaterializedValue(new ConsumerControlAsJava(_))
       .asJava
@@ -203,7 +206,7 @@ object Consumer {
       getOffsetsOnAssign: java.util.function.Function[java.util.Set[TopicPartition], CompletionStage[
         java.util.Map[TopicPartition, Long]
       ]]
-  ): Source[Pair[TopicPartition, Source[ConsumerRecord[K, V], NotUsed]], Control] =
+  ): Source[Pair[TopicPartition, Source[ConsumerRecord[K, V], Control]], Control] =
     scaladsl.Consumer
       .plainPartitionedManualOffsetSource(
         settings,
@@ -213,7 +216,10 @@ object Consumer {
         _ => ()
       )
       .map {
-        case (tp, source) => Pair(tp, source.asJava)
+        case (tp, source) =>
+          val sourceWithControl: Source[ConsumerRecord[K, V], Control] =
+            source.mapMaterializedValue(new ConsumerControlAsJava(_)).asJava
+          Pair(tp, sourceWithControl)
       }
       .mapMaterializedValue(new ConsumerControlAsJava(_))
       .asJava
@@ -233,7 +239,7 @@ object Consumer {
         java.util.Map[TopicPartition, Long]
       ]],
       onRevoke: java.util.function.Consumer[java.util.Set[TopicPartition]]
-  ): Source[Pair[TopicPartition, Source[ConsumerRecord[K, V], NotUsed]], Control] =
+  ): Source[Pair[TopicPartition, Source[ConsumerRecord[K, V], Control]], Control] =
     scaladsl.Consumer
       .plainPartitionedManualOffsetSource(
         settings,
@@ -243,7 +249,10 @@ object Consumer {
         (tps: Set[TopicPartition]) => onRevoke.accept(tps.asJava)
       )
       .map {
-        case (tp, source) => Pair(tp, source.asJava)
+        case (tp, source) =>
+          val sourceWithControl: Source[ConsumerRecord[K, V], Control] =
+            source.mapMaterializedValue(new ConsumerControlAsJava(_)).asJava
+          Pair(tp, sourceWithControl)
       }
       .mapMaterializedValue(new ConsumerControlAsJava(_))
       .asJava
@@ -254,11 +263,14 @@ object Consumer {
   def committablePartitionedSource[K, V](
       settings: ConsumerSettings[K, V],
       subscription: AutoSubscription
-  ): Source[Pair[TopicPartition, Source[CommittableMessage[K, V], NotUsed]], Control] =
+  ): Source[Pair[TopicPartition, Source[CommittableMessage[K, V], Control]], Control] =
     scaladsl.Consumer
       .committablePartitionedSource(settings, subscription)
       .map {
-        case (tp, source) => Pair(tp, source.asJava)
+        case (tp, source) =>
+          val sourceWithControl: Source[CommittableMessage[K, V], Control] =
+            source.mapMaterializedValue(new ConsumerControlAsJava(_)).asJava
+          Pair(tp, sourceWithControl)
       }
       .mapMaterializedValue(new ConsumerControlAsJava(_))
       .asJava
@@ -270,13 +282,16 @@ object Consumer {
       settings: ConsumerSettings[K, V],
       subscription: AutoSubscription,
       metadataFromRecord: java.util.function.Function[ConsumerRecord[K, V], String]
-  ): Source[Pair[TopicPartition, Source[CommittableMessage[K, V], NotUsed]], Control] =
+  ): Source[Pair[TopicPartition, Source[CommittableMessage[K, V], Control]], Control] =
     scaladsl.Consumer
       .commitWithMetadataPartitionedSource(settings,
                                            subscription,
                                            (record: ConsumerRecord[K, V]) => metadataFromRecord(record))
       .map {
-        case (tp, source) => Pair(tp, source.asJava)
+        case (tp, source) =>
+          val sourceWithControl: Source[CommittableMessage[K, V], Control] =
+            source.mapMaterializedValue(new ConsumerControlAsJava(_)).asJava
+          Pair(tp, sourceWithControl)
       }
       .mapMaterializedValue(new ConsumerControlAsJava(_))
       .asJava

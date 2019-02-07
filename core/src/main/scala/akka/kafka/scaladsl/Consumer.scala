@@ -192,7 +192,7 @@ object Consumer {
   def plainPartitionedSource[K, V](
       settings: ConsumerSettings[K, V],
       subscription: AutoSubscription
-  ): Source[(TopicPartition, Source[ConsumerRecord[K, V], NotUsed]), Control] =
+  ): Source[(TopicPartition, Source[ConsumerRecord[K, V], Control]), Control] =
     Source.fromGraph(new PlainSubSource[K, V](settings, subscription, None, onRevoke = _ => ()))
 
   /**
@@ -207,7 +207,7 @@ object Consumer {
       subscription: AutoSubscription,
       getOffsetsOnAssign: Set[TopicPartition] => Future[Map[TopicPartition, Long]],
       onRevoke: Set[TopicPartition] => Unit = _ => ()
-  ): Source[(TopicPartition, Source[ConsumerRecord[K, V], NotUsed]), Control] =
+  ): Source[(TopicPartition, Source[ConsumerRecord[K, V], Control]), Control] =
     Source.fromGraph(new PlainSubSource[K, V](settings, subscription, Some(getOffsetsOnAssign), onRevoke))
 
   /**
@@ -216,7 +216,7 @@ object Consumer {
   def committablePartitionedSource[K, V](
       settings: ConsumerSettings[K, V],
       subscription: AutoSubscription
-  ): Source[(TopicPartition, Source[CommittableMessage[K, V], NotUsed]), Control] =
+  ): Source[(TopicPartition, Source[CommittableMessage[K, V], Control]), Control] =
     Source.fromGraph(new CommittableSubSource[K, V](settings, subscription))
 
   /**
@@ -226,7 +226,7 @@ object Consumer {
       settings: ConsumerSettings[K, V],
       subscription: AutoSubscription,
       metadataFromRecord: ConsumerRecord[K, V] => String
-  ): Source[(TopicPartition, Source[CommittableMessage[K, V], NotUsed]), Control] =
+  ): Source[(TopicPartition, Source[CommittableMessage[K, V], Control]), Control] =
     Source.fromGraph(new CommittableSubSource[K, V](settings, subscription, metadataFromRecord))
 
   /**

@@ -16,7 +16,7 @@ import akka.stream.SourceShape
 import akka.stream.scaladsl.Source
 import akka.stream.stage.GraphStageLogic
 import akka.util.Timeout
-import akka.{Done, NotUsed}
+import akka.Done
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, OffsetAndMetadata}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.requests.OffsetFetchResponse
@@ -73,11 +73,11 @@ private[kafka] final class CommittableSubSource[K, V](settings: ConsumerSettings
                                                       subscription: AutoSubscription,
                                                       _metadataFromRecord: ConsumerRecord[K, V] => String =
                                                         (_: ConsumerRecord[K, V]) => OffsetFetchResponse.NO_METADATA)
-    extends KafkaSourceStage[K, V, (TopicPartition, Source[CommittableMessage[K, V], NotUsed])](
+    extends KafkaSourceStage[K, V, (TopicPartition, Source[CommittableMessage[K, V], Control])](
       s"CommittableSubSource ${subscription.renderStageAttribute}"
     ) {
   override protected def logic(
-      shape: SourceShape[(TopicPartition, Source[CommittableMessage[K, V], NotUsed])]
+      shape: SourceShape[(TopicPartition, Source[CommittableMessage[K, V], Control])]
   ): GraphStageLogic with Control =
     new SubSourceLogic[K, V, CommittableMessage[K, V]](shape, settings, subscription)
     with CommittableMessageBuilder[K, V] with MetricsControl {

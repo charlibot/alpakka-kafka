@@ -4,7 +4,6 @@
  */
 
 package akka.kafka.internal
-import akka.NotUsed
 import akka.actor.ActorRef
 import akka.annotation.InternalApi
 import akka.kafka.scaladsl.Consumer.Control
@@ -45,11 +44,11 @@ private[kafka] final class PlainSubSource[K, V](
     subscription: AutoSubscription,
     getOffsetsOnAssign: Option[Set[TopicPartition] => Future[Map[TopicPartition, Long]]],
     onRevoke: Set[TopicPartition] => Unit
-) extends KafkaSourceStage[K, V, (TopicPartition, Source[ConsumerRecord[K, V], NotUsed])](
+) extends KafkaSourceStage[K, V, (TopicPartition, Source[ConsumerRecord[K, V], Control])](
       s"PlainSubSource ${subscription.renderStageAttribute}"
     ) {
   override protected def logic(
-      shape: SourceShape[(TopicPartition, Source[ConsumerRecord[K, V], NotUsed])]
+      shape: SourceShape[(TopicPartition, Source[ConsumerRecord[K, V], Control])]
   ): GraphStageLogic with Control =
     new SubSourceLogic[K, V, ConsumerRecord[K, V]](shape, settings, subscription, getOffsetsOnAssign, onRevoke)
     with PlainMessageBuilder[K, V] with MetricsControl

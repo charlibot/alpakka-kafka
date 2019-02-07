@@ -34,13 +34,13 @@ import scala.concurrent.{Future, Promise}
   final def configureSubscription(): Unit = {
 
     def rebalanceListener(autoSubscription: AutoSubscription): KafkaConsumerActor.ListenerCallbacks = {
-      def partitionAssignedCB(assignedTps: Set[TopicPartition]) {
+      def partitionAssignedCB(assignedTps: Set[TopicPartition]): Unit = {
         tps ++= assignedTps
         log.debug("Assigned partitions: {}. All partitions: {}", assignedTps, tps)
         requestMessages()
       }
 
-      def partitionRevokedCB(revokedTps: Set[TopicPartition]) {
+      def partitionRevokedCB(revokedTps: Set[TopicPartition]): Unit = {
         tps --= revokedTps
         log.debug("Revoked partitions: {}. All partitions: {}", revokedTps, tps)
       }
