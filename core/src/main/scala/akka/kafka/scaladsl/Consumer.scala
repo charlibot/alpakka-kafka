@@ -11,7 +11,7 @@ import akka.kafka.ConsumerMessage.CommittableMessage
 import akka.kafka._
 import akka.kafka.internal._
 import akka.stream.scaladsl.Source
-import akka.{Done, NotUsed}
+import akka.Done
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.{Metric, MetricName, TopicPartition}
 
@@ -74,6 +74,8 @@ object Consumer {
      */
     def isShutdown: Future[Done]
 
+    def hasShutdown: Boolean
+
     /**
      * Exposes underlying consumer or producer metrics (as reported by underlying Kafka client library)
      */
@@ -85,7 +87,7 @@ object Consumer {
    * one, so that the stream can be stopped in a controlled way without losing
    * commits.
    */
-  final class DrainingControl[T] private (control: Control, streamCompletion: Future[T]) extends Control {
+  final class DrainingControl[T] private (control: Control, val streamCompletion: Future[T]) extends Control {
 
     override def stop(): Future[Done] = control.stop()
 
@@ -102,6 +104,8 @@ object Consumer {
     def drainAndShutdown()(implicit ec: ExecutionContext): Future[T] = control.drainAndShutdown(streamCompletion)(ec)
 
     override def isShutdown: Future[Done] = control.isShutdown
+
+    override def hasShutdown: Boolean = control.hasShutdown
 
     override def metrics: Future[Map[MetricName, Metric]] = control.metrics
   }
@@ -126,6 +130,7 @@ object Consumer {
     override def stop(): Future[Done] = Future.failed(exception)
     override def shutdown(): Future[Done] = Future.failed(exception)
     override def isShutdown: Future[Done] = Future.failed(exception)
+    override def hasShutdown: Boolean = false
     override def metrics: Future[Map[MetricName, Metric]] = Future.failed(exception)
   }
 

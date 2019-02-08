@@ -5,7 +5,7 @@
 
 package akka.kafka.scaladsl
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
 import akka.pattern.ask
 import akka.pattern.pipe
 import akka.kafka.ConsumerMessage.TransactionalMessage
@@ -30,7 +30,7 @@ object Transactional {
 
   case class TopicPartitionAndControl[T](topicPartition: TopicPartition, control: DrainingControl[T])
 
-  class RebalanceListener(original: Option[ActorRef]) extends Actor {
+  class RebalanceListener(original: Option[ActorRef]) extends Actor with ActorLogging {
     var topicPartitionAndControls: Map[TopicPartition, DrainingControl[_]] = Map()
 
     implicit val timeout
@@ -38,9 +38,11 @@ object Transactional {
     import context.dispatcher
     override def receive: Receive = {
       case tpa @ TopicPartitionsAssigned(subscription, assigned) =>
+        log.info(s"Received assigned: $assigned")
         val client = sender()
         askOriginal(tpa) pipeTo client
       case tpr @ TopicPartitionsRevoked(subscription, revoked) =>
+        log.info(s"Received revoked: $revoked")
         val client = sender()
         askOriginal(tpr).flatMap { _ =>
           Future.sequence {
@@ -48,6 +50,7 @@ object Transactional {
           }
         } pipeTo client
       case TopicPartitionAndControl(topicPartition, control) =>
+        log.info(s"Received topic partition $topicPartition")
         topicPartitionAndControls += topicPartition -> control
     }
 

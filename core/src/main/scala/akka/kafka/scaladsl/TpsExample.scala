@@ -43,7 +43,7 @@ object TpsExample {
             .mapMaterializedValue(DrainingControl.apply)
             .run()
           rebalanceRef ! TopicPartitionAndControl(tp, drainingControl)
-          drainingControl.isShutdown
+          drainingControl.streamCompletion
       }
       .toMat(Sink.ignore)(Keep.both)
       .mapMaterializedValue(DrainingControl.apply)

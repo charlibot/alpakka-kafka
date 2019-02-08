@@ -50,6 +50,8 @@ object ConsumerControlFactory {
 
     override def isShutdown: Future[Done] = shutdownPromise.future
 
+    override def hasShutdown: Boolean = shutdownPromise.isCompleted
+
     override def metrics: Future[Map[MetricName, Metric]] = ???
   }
 

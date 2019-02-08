@@ -66,6 +66,8 @@ private trait PromiseControl extends GraphStageLogic with scaladsl.Consumer.Cont
   }
   override def isShutdown: Future[Done] = shutdownPromise.future
 
+  override def hasShutdown: Boolean = shutdownPromise.isCompleted
+
 }
 
 /** Internal API */

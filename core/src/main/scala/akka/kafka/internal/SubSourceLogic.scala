@@ -5,6 +5,7 @@
 
 package akka.kafka.internal
 
+import akka.Done
 import akka.actor.Status
 import akka.actor.{ActorRef, ExtendedActorSystem, Terminated}
 import akka.annotation.InternalApi
@@ -138,57 +139,65 @@ private abstract class SubSourceLogic[K, V, Msg](
   }
 
   def partitionAssignedCB(assigned: Set[TopicPartition]): Unit = {
+    val formerlyKnown = assigned intersect partitionsToRevoke
+    val requriesRestarting = formerlyKnown.filter(tp => subSources(tp).hasShutdown)
     val formerlyUnknown = assigned -- partitionsToRevoke
+    val toStart = formerlyUnknown ++ requriesRestarting
 
-    if (log.isDebugEnabled && formerlyUnknown.nonEmpty) {
-      log.debug("#{} Assigning new partitions: {}", actorNumber, formerlyUnknown.mkString(", "))
+    if (log.isDebugEnabled && toStart.nonEmpty) {
+      log.debug("#{} Assigning new partitions: {}", actorNumber, toStart.mkString(", "))
     }
 
     // make sure re-assigned partitions don't get closed on CloseRevokedPartitions timer
     partitionsToRevoke = partitionsToRevoke -- assigned
 
-    getOffsetsOnAssign match {
+    implicit val ec: ExecutionContext = materializer.executionContext
+
+    val emittedSubSources = getOffsetsOnAssign match {
       case None =>
-        updatePendingPartitionsAndEmitSubSources(formerlyUnknown)
+//        updatePendingPartitionsAndEmitSubSources(formerlyUnknown)
+        updatePendingPartitionsAndEmitSubSourcesCb.invokeWithFeedback(toStart)
 
       case Some(getOffsetsFromExternal) =>
-        implicit val ec: ExecutionContext = materializer.executionContext
         getOffsetsFromExternal(assigned)
-          .onComplete {
-            case Failure(ex) =>
-              stageFailCB.invoke(
+          .flatMap(seekAndEmitSubSources(toStart, _))
+          .recoverWith {
+            case exception: Exception =>
+              stageFailCB.invokeWithFeedback(
                 new ConsumerFailed(
-                  s"#$actorNumber Failed to fetch offset for partitions: ${formerlyUnknown.mkString(", ")}.",
-                  ex
+                  s"#$actorNumber Failed to fetch offset for partitions: ${toStart.mkString(", ")}.",
+                  exception
                 )
               )
-            case Success(offsets) =>
-              seekAndEmitSubSources(formerlyUnknown, offsets)
           }
     }
 
-    if (log.isDebugEnabled) {
-      log.debug("#{} Closing SubSources for revoked partitions: {}", actorNumber, partitionsToRevoke.mkString(", "))
+    emittedSubSources.map { _ =>
+      if (log.isDebugEnabled) {
+        log.debug("#{} Closing SubSources for revoked partitions: {}", actorNumber, partitionsToRevoke.mkString(", "))
+      }
+      onRevoke(partitionsToRevoke)
+      pendingPartitions --= partitionsToRevoke
+      partitionsInStartup --= partitionsToRevoke
+      partitionsToRevoke.flatMap(subSources.get).foreach(_.shutdown())
+      subSources --= partitionsToRevoke
+      partitionsToRevoke = Set.empty
+      log.info("Finished ...")
     }
-    onRevoke(partitionsToRevoke)
-    pendingPartitions --= partitionsToRevoke
-    partitionsInStartup --= partitionsToRevoke
-    partitionsToRevoke.flatMap(subSources.get).foreach(_.shutdown())
-    subSources --= partitionsToRevoke
-    partitionsToRevoke = Set.empty
   }
 
   private def seekAndEmitSubSources(
-      formerlyUnknown: Set[TopicPartition],
+      toStartPartitions: Set[TopicPartition],
       offsets: Map[TopicPartition, Long]
-  ): Unit = {
+  ): Future[Done] = {
     implicit val ec: ExecutionContext = materializer.executionContext
+    log.info("Seeking and emitting sub sources")
     consumerActor
       .ask(KafkaConsumerActor.Internal.Seek(offsets))(Timeout(10.seconds), sourceActor.ref)
-      .map(_ => updatePendingPartitionsAndEmitSubSourcesCb.invoke(formerlyUnknown))
-      .recover {
+      .flatMap(_ => updatePendingPartitionsAndEmitSubSourcesCb.invokeWithFeedback(toStartPartitions))
+      .recoverWith {
         case _: AskTimeoutException =>
-          stageFailCB.invoke(
+          stageFailCB.invokeWithFeedback(
             new ConsumerFailed(
               s"#$actorNumber Consumer failed during seek for partitions: ${offsets.keys.mkString(", ")}."
             )
@@ -210,7 +219,7 @@ private abstract class SubSourceLogic[K, V, Msg](
             if (log.isDebugEnabled) {
               log.debug("#{} Seeking {} to {} after partition SubSource cancelled", actorNumber, tp, record.offset())
             }
-            seekAndEmitSubSources(formerlyUnknown = Set.empty, Map(tp -> record.offset()))
+            seekAndEmitSubSources(toStartPartitions = Set.empty, Map(tp -> record.offset()))
           case None => emitSubSourcesForPendingPartitions()
         }
     }
@@ -219,7 +228,7 @@ private abstract class SubSourceLogic[K, V, Msg](
     case (tp, control) =>
       if (!partitionsInStartup.contains(tp)) {
         // Partition was revoked while
-        // starting up.  Kill!
+        // starting  up. Kill!
         control.shutdown()
       } else {
         subSources += (tp -> control)
@@ -234,8 +243,9 @@ private abstract class SubSourceLogic[K, V, Msg](
       performShutdown()
   })
 
-  private def updatePendingPartitionsAndEmitSubSources(formerlyUnknownPartitions: Set[TopicPartition]): Unit = {
-    pendingPartitions ++= formerlyUnknownPartitions.filter(!partitionsInStartup.contains(_))
+  private def updatePendingPartitionsAndEmitSubSources(toStartPartitions: Set[TopicPartition]): Unit = {
+    pendingPartitions ++= toStartPartitions.filter(!partitionsInStartup.contains(_))
+    log.info("About to emit sub sources")
     emitSubSourcesForPendingPartitions()
   }
 
@@ -243,6 +253,7 @@ private abstract class SubSourceLogic[K, V, Msg](
   private def emitSubSourcesForPendingPartitions(): Unit =
     if (pendingPartitions.nonEmpty && isAvailable(shape.out)) {
       val tp = pendingPartitions.head
+      log.info(s"Emitting $tp")
 
       pendingPartitions = pendingPartitions.tail
       partitionsInStartup += tp
