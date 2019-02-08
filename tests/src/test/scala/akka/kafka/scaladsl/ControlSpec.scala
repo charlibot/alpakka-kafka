@@ -27,6 +27,8 @@ object ControlSpec {
       shutdownCalled.set(true)
       shutdownFuture
     }
+
+    override def hasShutdown: Boolean = ???
     override def isShutdown: Future[Done] = ???
     override def metrics: Future[Map[MetricName, Metric]] = ???
   }

@@ -25,7 +25,7 @@ import scala.annotation.tailrec
 import scala.collection.immutable
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /**
  * Internal API.
@@ -88,7 +88,7 @@ private abstract class SubSourceLogic[K, V, Msg](
               val listenerCompletion =
                 listenerRef.ask(TopicPartitionsAssigned(subscription, assignedTps))(settings.waitClosePartition,
                                                                                     sourceActor.ref)
-              val completedListener = Await.ready(listenerCompletion, settings.waitClosePartition).value.get
+              val completedListener = Try(Await.result(listenerCompletion, settings.waitClosePartition))
               completedListener match {
                 case Success(_) =>
                 case Failure(_) =>
@@ -97,9 +97,7 @@ private abstract class SubSourceLogic[K, V, Msg](
                   )
               }
           }
-          if (assignedTps.nonEmpty) {
-            partitionAssignedCB(assignedTps)
-          }
+          partitionAssignedCB(assignedTps)
         },
         revokedTps => {
           subscription.rebalanceListener.foreach {
@@ -108,7 +106,7 @@ private abstract class SubSourceLogic[K, V, Msg](
               val listenerCompletion =
                 listenerRef.ask(TopicPartitionsRevoked(subscription, revokedTps))(settings.waitClosePartition,
                                                                                   sourceActor.ref)
-              val completedListener = Await.ready(listenerCompletion, settings.waitClosePartition).value.get
+              val completedListener = Try(Await.result(listenerCompletion, settings.waitClosePartition))
               completedListener match {
                 case Success(_) =>
                 case Failure(_) =>
@@ -117,9 +115,7 @@ private abstract class SubSourceLogic[K, V, Msg](
                   )
               }
           }
-          if (revokedTps.nonEmpty) {
-            partitionRevokedCB(revokedTps)
-          }
+          partitionRevokedCB(revokedTps)
         }
       )
 
@@ -140,7 +136,7 @@ private abstract class SubSourceLogic[K, V, Msg](
 
   def partitionAssignedCB(assigned: Set[TopicPartition]): Unit = {
     val formerlyKnown = assigned intersect partitionsToRevoke
-    val requriesRestarting = formerlyKnown.filter(tp => subSources(tp).hasShutdown)
+    val requriesRestarting = formerlyKnown.filter(tp => subSources.get(tp).exists(_.hasShutdown))
     val formerlyUnknown = assigned -- partitionsToRevoke
     val toStart = formerlyUnknown ++ requriesRestarting
 

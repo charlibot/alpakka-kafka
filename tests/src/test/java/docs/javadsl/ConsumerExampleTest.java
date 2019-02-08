@@ -333,8 +333,8 @@ class ConsumerExampleTest extends EmbeddedKafkaTest {
             .mapAsyncUnordered(
                 maxPartitions,
                 pair -> {
-                  Source<ConsumerMessage.CommittableMessage<String, String>, NotUsed> source =
-                      pair.second();
+                  Source<ConsumerMessage.CommittableMessage<String, String>, Consumer.Control>
+                      source = pair.second();
                   return source
                       .via(business())
                       .map(message -> message.committableOffset())
